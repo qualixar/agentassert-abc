@@ -39,7 +39,7 @@ jobs:
         run: uv run ruff check src/ tests/
 
       - name: Type check (basedpyright)
-        run: uv run basedpyright
+        run: uv run basedpyright src/
 
       - name: Test with coverage
         run: uv run pytest --cov=agentassert_abc --cov-report=xml -q
