@@ -16,7 +16,12 @@ from __future__ import annotations
 import re
 
 from agentassert_abc.dsl.models import ValidationError
-from agentassert_abc.models import ConstraintCheck, ContractSpec, GovernanceConstraint, SoftConstraint  # noqa: TCH001
+from agentassert_abc.models import (  # noqa: TCH001
+    ConstraintCheck,
+    ContractSpec,
+    GovernanceConstraint,
+    SoftConstraint,
+)
 
 _OPERATOR_FIELDS = (
     "equals", "not_equals", "gt", "gte", "lt", "lte",
