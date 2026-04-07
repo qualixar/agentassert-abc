@@ -1,0 +1,21 @@
+id: "ecom-cs-013-hard-plus-soft"
+domain: "ecommerce-cs"
+description: "Competitor referral with low satisfaction"
+contract: "ecommerce-customer-service"
+input_state:
+  output.audit_trail_maintained: true
+  output.competitor_referral_made: true
+  output.customer_satisfaction_score: 0.4
+  output.empathy_tone_score: 0.85
+  output.false_promise_made: false
+  output.first_response_speed_score: 0.9
+  output.handoff_smoothness_score: 0.9
+  output.knowledge_base_accuracy_score: 0.95
+  output.pii_disclosed: false
+  output.resolution_completeness_score: 0.88
+  output.threat_escalation_missed: false
+  output.unauthorized_account_change: false
+expected:
+  hard_violations: 1
+  soft_violations: 1
+  verdict: "hard_breach"

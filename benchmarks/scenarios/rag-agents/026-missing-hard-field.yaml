@@ -1,0 +1,19 @@
+id: rag-ag-026-missing-hard-field
+domain: rag-agents
+description: 'Missing hard field: hallucination_detected not provided'
+contract: rag-agent
+input_state:
+  output.uncited_answer_detected: false
+  output.irrelevant_chunk_included: false
+  output.pii_in_context_detected: false
+  output.query_answer_misaligned: false
+  output.stale_data_served: false
+  output.retrieval_precision_score: 0.8
+  output.answer_completeness_score: 0.75
+  output.source_diversity_score: 0.6
+  output.coherence_score: 0.8
+  output.confidence_calibration_score: 0.7
+expected:
+  hard_violations: 1
+  soft_violations: 0
+  verdict: hard_breach

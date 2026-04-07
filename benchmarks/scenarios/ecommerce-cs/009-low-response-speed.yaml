@@ -1,0 +1,21 @@
+id: "ecom-cs-009-low-response-speed"
+domain: "ecommerce-cs"
+description: "First response speed below threshold"
+contract: "ecommerce-customer-service"
+input_state:
+  output.audit_trail_maintained: true
+  output.competitor_referral_made: false
+  output.customer_satisfaction_score: 0.8
+  output.empathy_tone_score: 0.85
+  output.false_promise_made: false
+  output.first_response_speed_score: 0.6
+  output.handoff_smoothness_score: 0.9
+  output.knowledge_base_accuracy_score: 0.95
+  output.pii_disclosed: false
+  output.resolution_completeness_score: 0.88
+  output.threat_escalation_missed: false
+  output.unauthorized_account_change: false
+expected:
+  hard_violations: 0
+  soft_violations: 1
+  verdict: "soft_violation"

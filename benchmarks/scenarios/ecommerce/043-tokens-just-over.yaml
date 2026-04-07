@@ -1,0 +1,24 @@
+id: "ecommerce-043-tokens-just-over"
+domain: "ecommerce"
+description: "Edge case - tokens at 30001 just over 30000 limit"
+contract: "ecommerce-product-recommendation"
+input_state:
+  output.competitor_reference_detected: false
+  output.unverified_availability_claim: false
+  output.unauthorized_discount_offered: false
+  output.pii_detected: false
+  output.sponsored_items_disclosed: true
+  output.undisclosed_dynamic_pricing: false
+  tools.all_calls_authorized: true
+  output.brand_tone_score: 0.85
+  output.recommendation_relevance_score: 0.78
+  output.completeness_score: 0.75
+  output.upsell_count: 1
+  response.latency_ms: 1500
+  output.customer_satisfaction_score: 0.65
+  session.total_tokens: 30001
+  session.total_cost_usd: 0.85
+expected:
+  hard_violations: 0
+  soft_violations: 1
+  verdict: "soft_violation"

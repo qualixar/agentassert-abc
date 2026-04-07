@@ -1,0 +1,21 @@
+id: "ecom-order-002-high-scores-compliant"
+domain: "ecommerce-order"
+description: "All hard pass, soft scores well above thresholds"
+contract: "ecommerce-order-management"
+input_state:
+  output.canceled_order_fulfilled: false
+  output.communication_tone_score: 0.97
+  output.confirmation_speed_score: 0.99
+  output.inventory_check_skipped: false
+  output.order_status_mismatch: false
+  output.payment_data_exposed: false
+  output.price_override_attempted: false
+  output.repeat_issue_escalation_rate: 0.99
+  output.shipping_estimate_accuracy: 0.98
+  output.tracking_completeness_score: 0.99
+  output.unauthorized_refund_issued: false
+  output.upsell_relevance_score: 0.95
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: "compliant"

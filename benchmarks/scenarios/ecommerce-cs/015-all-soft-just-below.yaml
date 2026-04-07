@@ -1,0 +1,21 @@
+id: "ecom-cs-015-all-soft-just-below"
+domain: "ecommerce-cs"
+description: "All soft scores just below thresholds"
+contract: "ecommerce-customer-service"
+input_state:
+  output.audit_trail_maintained: true
+  output.competitor_referral_made: false
+  output.customer_satisfaction_score: 0.69
+  output.empathy_tone_score: 0.74
+  output.false_promise_made: false
+  output.first_response_speed_score: 0.79
+  output.handoff_smoothness_score: 0.79
+  output.knowledge_base_accuracy_score: 0.89
+  output.pii_disclosed: false
+  output.resolution_completeness_score: 0.79
+  output.threat_escalation_missed: false
+  output.unauthorized_account_change: false
+expected:
+  hard_violations: 0
+  soft_violations: 6
+  verdict: "soft_violation"

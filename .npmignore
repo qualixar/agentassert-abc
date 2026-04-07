@@ -1,0 +1,28 @@
+# This .npmignore covers the npm placeholder package (claim/npm/)
+# Ensure nothing sensitive leaks into the npm registry.
+
+.env
+.env.*
+*.env
+.backup/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+tests/
+benchmarks/
+claim/
+.coverage
+htmlcov/
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+*.ots
+uv.lock
+.DS_Store
+.idea/
+.vscode/

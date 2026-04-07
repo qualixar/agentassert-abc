@@ -1,0 +1,19 @@
+id: "research-009-low-analysis-depth"
+domain: "research"
+description: "Analysis depth below threshold"
+contract: "research-assistant"
+input_state:
+  output.analysis_depth_score: 0.4
+  output.bias_disclosure_present: true
+  output.citation_format_score: 0.9
+  output.fabricated_citation_detected: false
+  output.plagiarism_detected: false
+  output.relevance_score: 0.85
+  output.source_diversity_score: 0.8
+  output.source_recency_score: 0.7
+  output.unsourced_claim_detected: false
+  output.unverified_data_detected: false
+expected:
+  hard_violations: 0
+  soft_violations: 1
+  verdict: "soft_violation"

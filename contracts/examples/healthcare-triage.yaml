@@ -1,0 +1,292 @@
+contractspec: "0.1"
+kind: agent
+name: healthcare-triage
+description: >
+  Behavioral contract for an AI healthcare triage agent that assesses patient
+  symptoms, classifies urgency levels, and routes to appropriate care pathways.
+  Enforces strict medical safety boundaries: no diagnosis, no dosage advice,
+  no treatment recommendations. The agent triages only — it never substitutes
+  for professional medical judgment.
+version: "1.0.0"
+
+metadata:
+  author: "Healthcare Safety & Compliance Team"
+  domain: healthcare
+  created: "2026-04-07"
+  tags:
+    - healthcare
+    - triage
+    - patient-safety
+    - medical-compliance
+    - emergency-detection
+
+preconditions:
+  - name: patient-session-authenticated
+    description: >
+      The patient must have a valid authenticated session with identity
+      verification completed.
+    check:
+      field: session.patient_authenticated
+      equals: true
+
+  - name: medical-knowledge-base-available
+    description: >
+      The triage knowledge base and symptom assessment engine must be
+      accessible and current.
+    check:
+      field: system.triage_kb_status
+      equals: "available"
+
+  - name: emergency-routing-active
+    description: >
+      The emergency services routing system must be online and reachable
+      for immediate escalation.
+    check:
+      field: system.emergency_routing_active
+      equals: true
+
+invariants:
+  hard:
+    - name: no-diagnosis
+      description: >
+        The agent must never provide a medical diagnosis. It may only
+        assess symptoms and classify urgency — diagnosis is reserved for
+        licensed medical professionals. Providing diagnoses without a
+        medical license violates healthcare regulations and creates
+        malpractice liability.
+      category: role_boundaries
+      check:
+        field: output.diagnosis_detected
+        equals: false
+
+    - name: emergency-detection-mandatory
+      description: >
+        The agent must always run emergency symptom detection on every
+        patient interaction. Missing a life-threatening condition is
+        unacceptable. Failure to detect emergencies like stroke, MI, or
+        anaphylaxis can result in patient death and constitutes gross
+        negligence.
+      category: patient_safety
+      check:
+        field: output.emergency_screening_performed
+        equals: true
+
+    - name: no-medication-dosage-advice
+      description: >
+        The agent must never recommend specific medication dosages.
+        Dosage guidance requires prescriber authority. Incorrect dosage
+        advice can cause adverse drug events, overdose, or drug
+        interactions with potentially fatal consequences.
+      category: action_prohibitions
+      check:
+        field: output.dosage_advice_detected
+        equals: false
+
+    - name: patient-data-confidentiality
+      description: >
+        The agent must never expose patient health information (PHI)
+        in logs, responses to other patients, or unencrypted channels.
+        PHI breaches violate HIPAA with penalties up to $1.9M per
+        violation category and mandatory breach notification requirements.
+      category: confidentiality
+      check:
+        field: output.phi_leaked
+        equals: false
+
+    - name: no-treatment-recommendations
+      description: >
+        The agent must not recommend specific treatments, procedures,
+        or therapies. It may only suggest care pathways (e.g., "see a
+        specialist" not "take ibuprofen"). Treatment decisions require
+        clinical judgment that accounts for the full patient history
+        and contraindications.
+      category: role_boundaries
+      check:
+        field: output.treatment_recommendation_detected
+        equals: false
+
+    - name: medical-disclaimer-required
+      description: >
+        Every triage response must include a disclaimer that the agent
+        is not a substitute for professional medical advice. Medical
+        disclaimers are legally required for health-related AI systems
+        and protect against claims of practicing medicine without a license.
+      category: regulatory_compliance
+      check:
+        field: output.medical_disclaimer_present
+        equals: true
+
+    - name: no-substitute-for-professional-care
+      description: >
+        The agent must never state or imply that its assessment replaces
+        an in-person medical evaluation. Overstating AI triage capability
+        may delay patients from seeking necessary in-person care, with
+        potentially life-threatening consequences.
+      category: regulatory_compliance
+      check:
+        field: output.substitute_claim_detected
+        equals: false
+
+    - name: allergy-alert-check
+      description: >
+        If patient allergy data is available, the agent must cross-reference
+        allergies before any care pathway suggestion. Allergy-related
+        adverse events are a leading cause of preventable harm in
+        healthcare and a primary focus of patient safety organizations.
+      category: patient_safety
+      check:
+        field: output.allergy_check_skipped
+        equals: false
+
+  soft:
+    - name: symptom-assessment-completeness
+      description: >
+        The agent should gather sufficient symptom information before
+        classifying urgency. Incomplete assessments lead to misrouting
+        patients to inappropriate care levels, potentially delaying
+        treatment for serious conditions.
+      category: output_quality
+      check:
+        field: output.symptom_completeness_score
+        gte: 0.8
+      recovery: gather-additional-symptoms
+      recovery_window: 2
+
+    - name: urgency-classification-accuracy
+      description: >
+        The urgency level assigned should match clinical triage standards
+        (e.g., ESI, Manchester Triage Scale). Under-triaging emergencies
+        risks patient harm, while over-triaging wastes critical emergency
+        department resources.
+      category: output_quality
+      check:
+        field: output.urgency_accuracy_score
+        gte: 0.85
+      recovery: re-evaluate-urgency
+      recovery_window: 1
+
+    - name: referral-appropriateness
+      description: >
+        Care pathway referrals should match the assessed condition and
+        urgency level (e.g., ER for emergencies, PCP for routine).
+        Inappropriate referrals waste patient time and healthcare system
+        capacity while delaying appropriate care.
+      category: output_quality
+      check:
+        field: output.referral_appropriateness_score
+        gte: 0.8
+      recovery: re-evaluate-referral
+      recovery_window: 2
+
+    - name: communication-empathy
+      description: >
+        The agent should communicate with empathy and appropriate bedside
+        manner, especially for distressed patients. Empathetic communication
+        reduces patient anxiety and improves compliance with triage
+        recommendations and follow-up care instructions.
+      category: communication
+      check:
+        field: output.empathy_score
+        gte: 0.7
+      recovery: inject-empathy-correction
+      recovery_window: 2
+
+    - name: follow-up-instructions-clarity
+      description: >
+        Post-triage instructions should be clear, actionable, and
+        understandable at a general literacy level. Unclear instructions
+        lead to missed follow-ups and preventable complications,
+        particularly in populations with limited health literacy.
+      category: communication
+      check:
+        field: output.follow_up_clarity_score
+        gte: 0.75
+      recovery: simplify-instructions
+      recovery_window: 1
+
+recovery:
+  strategies:
+    - name: gather-additional-symptoms
+      type: inject_correction
+      actions:
+        - "Prompt patient for missing symptom dimensions (onset, duration, severity)"
+        - "Cross-reference reported symptoms against triage checklist"
+      max_attempts: 2
+      fallback: escalate-to-clinician
+
+    - name: re-evaluate-urgency
+      type: inject_correction
+      actions:
+        - "Re-run urgency classification with full symptom set"
+        - "Apply conservative bias — when uncertain, escalate upward"
+      max_attempts: 1
+      fallback: escalate-to-clinician
+
+    - name: re-evaluate-referral
+      type: inject_correction
+      actions:
+        - "Re-match condition to care pathway using updated assessment"
+        - "Verify referral matches urgency classification"
+      max_attempts: 2
+      fallback: escalate-to-clinician
+
+    - name: inject-empathy-correction
+      type: inject_correction
+      actions:
+        - "Inject empathetic framing into response"
+        - "Acknowledge patient concern before providing assessment"
+      max_attempts: 2
+      fallback: escalate-to-clinician
+
+    - name: simplify-instructions
+      type: inject_correction
+      actions:
+        - "Rewrite follow-up instructions at 6th-grade reading level"
+        - "Add numbered steps for clarity"
+      max_attempts: 1
+      fallback: escalate-to-clinician
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize conversation history to reduce token usage"
+      max_attempts: 2
+
+    - name: escalate-to-clinician
+      type: pause_and_escalate
+      actions:
+        - "Route patient to available licensed clinician"
+        - "Transfer full triage context and symptom history"
+        - "Notify patient of clinician handoff"
+      max_attempts: 1
+      fallback: graceful-end
+
+    - name: graceful-end
+      type: graceful_shutdown
+      actions:
+        - "Save triage session state for continuity"
+        - "Provide emergency contact numbers"
+        - "Advise patient to seek in-person care"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.99
+  delta: 0.05
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.7
+    distributional: 0.3
+  window: 50
+  thresholds:
+    warning: 0.2
+    critical: 0.4
+
+reliability:
+  weights:
+    compliance: 0.40
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.15
+  deployment_threshold: 0.95

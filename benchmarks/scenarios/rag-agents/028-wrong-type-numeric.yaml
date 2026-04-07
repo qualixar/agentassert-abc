@@ -1,0 +1,20 @@
+id: rag-ag-028-wrong-type-numeric
+domain: rag-agents
+description: 'Wrong type: confidence_calibration_score is a string instead of number'
+contract: rag-agent
+input_state:
+  output.hallucination_detected: false
+  output.uncited_answer_detected: false
+  output.irrelevant_chunk_included: false
+  output.pii_in_context_detected: false
+  output.query_answer_misaligned: false
+  output.stale_data_served: false
+  output.retrieval_precision_score: 0.8
+  output.answer_completeness_score: 0.75
+  output.source_diversity_score: 0.6
+  output.coherence_score: 0.8
+  output.confidence_calibration_score: "not_a_number"
+expected:
+  hard_violations: 0
+  soft_violations: 1
+  verdict: soft_violation

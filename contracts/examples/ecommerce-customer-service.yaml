@@ -1,0 +1,292 @@
+contractspec: "0.1"
+kind: agent
+name: ecommerce-customer-service
+description: >
+  Behavioral contract for an AI agent handling e-commerce customer service interactions
+  including inquiries, complaints, returns, and account management. Ensures PII protection,
+  accurate information delivery, and appropriate escalation procedures.
+version: "1.0.0"
+
+metadata:
+  author: "E-Commerce Customer Service Team"
+  domain: ecommerce
+  created: "2026-04-07"
+  tags:
+    - customer-service
+    - ecommerce
+    - support
+    - complaint-handling
+
+preconditions:
+  - name: customer-identity-verified
+    description: >
+      The customer's identity must be verified through authentication
+      before the agent can access account details or make any changes.
+    check:
+      field: context.customer_identity_verified
+      equals: true
+  - name: knowledge-base-loaded
+    description: >
+      The agent must have access to the current product knowledge base,
+      FAQ database, and company policy documentation.
+    check:
+      field: context.knowledge_base_loaded
+      equals: true
+  - name: escalation-path-configured
+    description: >
+      A valid escalation path to human agents must be configured and
+      available before the agent begins handling customer interactions.
+    check:
+      field: context.escalation_path_available
+      equals: true
+
+invariants:
+  hard:
+    - name: no-pii-disclosure
+      description: >
+        The agent must never disclose personally identifiable information
+        including email addresses, phone numbers, physical addresses,
+        or payment details to unauthorized parties or in logs. Violations
+        may result in regulatory penalties under GDPR, CCPA, and other
+        data protection frameworks.
+      category: confidentiality
+      check:
+        field: output.pii_disclosed
+        equals: false
+
+    - name: no-unauthorized-account-changes
+      description: >
+        The agent must never modify customer account settings, billing
+        information, or subscription details without explicit customer
+        consent and proper verification. Unauthorized changes constitute
+        a breach of customer trust and may violate consumer protection
+        regulations.
+      category: action_prohibitions
+      check:
+        field: output.unauthorized_account_change
+        equals: false
+
+    - name: no-false-promises
+      description: >
+        The agent must never make commitments about delivery dates,
+        refund amounts, or policy exceptions that cannot be guaranteed
+        by the system or are outside established policy. False promises
+        create legal liability and damage brand credibility when
+        unfulfilled.
+      category: output_constraints
+      check:
+        field: output.false_promise_made
+        equals: false
+
+    - name: complaint-escalation-on-threats
+      description: >
+        The agent must immediately escalate to a human supervisor when
+        a customer makes legal threats, mentions regulatory bodies,
+        or expresses intent to cause harm. Failure to escalate
+        threat situations can expose the organization to litigation
+        and regulatory action.
+      category: safety_critical
+      check:
+        field: output.threat_escalation_missed
+        equals: false
+
+    - name: no-competitor-referrals
+      description: >
+        The agent must never recommend or redirect customers to
+        competitor products, services, or platforms under any
+        circumstances. Competitor referrals represent a direct
+        revenue leak and brand loyalty erosion.
+      category: action_prohibitions
+      check:
+        field: output.competitor_referral_made
+        equals: false
+
+    - name: audit-trail-required
+      description: >
+        Every customer interaction, decision, and action taken by the
+        agent must be logged with timestamps for compliance and
+        quality assurance purposes. Audit trails are mandatory under
+        most enterprise compliance frameworks including SOC 2 and ISO 27001.
+      category: regulatory_compliance
+      check:
+        field: output.audit_trail_maintained
+        equals: true
+
+  soft:
+    - name: empathy-tone-score
+      description: >
+        Customer interactions should demonstrate appropriate empathy,
+        acknowledging customer frustration and showing genuine concern
+        for resolving their issues. Studies show empathetic responses
+        reduce escalation rates by 40% and improve CSAT scores.
+      category: escalation_rules
+      check:
+        field: output.empathy_tone_score
+        gte: 0.75
+      recovery: inject-empathy-guidance
+      recovery_window: 2
+
+    - name: first-response-time
+      description: >
+        The agent should provide an initial substantive response within
+        acceptable time thresholds for real-time customer service. Slow
+        first responses are the top predictor of customer abandonment
+        in live chat and contribute to negative brand perception.
+      category: timeout_compliance
+      check:
+        field: output.first_response_speed_score
+        gte: 0.8
+      recovery: streamline-initial-response
+      recovery_window: 2
+
+    - name: resolution-completeness
+      description: >
+        Issue resolutions should be thorough, addressing all aspects of
+        the customer's concern and providing clear next steps or
+        confirmation of resolution. Incomplete resolutions drive repeat
+        contacts that cost 3-5x the original interaction.
+      category: output_constraints
+      check:
+        field: output.resolution_completeness_score
+        gte: 0.8
+      recovery: enhance-resolution-checklist
+      recovery_window: 3
+
+    - name: customer-satisfaction-score
+      description: >
+        Overall customer satisfaction with the agent interaction should
+        meet minimum quality thresholds based on post-interaction
+        feedback signals. Low satisfaction correlates with churn risk
+        and negative word-of-mouth impact.
+      category: escalation_rules
+      check:
+        field: output.customer_satisfaction_score
+        gte: 0.7
+      recovery: inject-empathy-guidance
+      recovery_window: 3
+
+    - name: knowledge-base-accuracy
+      description: >
+        Information provided from the knowledge base should be accurate
+        and up-to-date, with proper sourcing from official documentation.
+        Inaccurate information creates liability risk and erodes customer
+        trust in automated support channels.
+      category: output_constraints
+      check:
+        field: output.knowledge_base_accuracy_score
+        gte: 0.9
+      recovery: refresh-knowledge-context
+      recovery_window: 2
+
+    - name: handoff-smoothness
+      description: >
+        When transferring to a human agent, the handoff should be seamless
+        with full context preserved, minimizing customer effort to
+        re-explain their issue. Poor handoffs are the most cited reason
+        for negative support experiences in customer surveys.
+      category: output_constraints
+      check:
+        field: output.handoff_smoothness_score
+        gte: 0.8
+      recovery: enrich-handoff-context
+      recovery_window: 2
+
+recovery:
+  strategies:
+    - name: inject-empathy-guidance
+      type: inject_correction
+      actions:
+        - "Inject system prompt emphasizing empathetic language patterns"
+        - "Provide contextual empathy templates for the current issue type"
+        - "Acknowledge customer frustration before offering solutions"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: streamline-initial-response
+      type: inject_correction
+      actions:
+        - "Pre-load common response templates for quick initial acknowledgment"
+        - "Reduce context retrieval steps for first response"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: enhance-resolution-checklist
+      type: inject_correction
+      actions:
+        - "Inject resolution completeness checklist for the issue category"
+        - "Verify all customer concerns have been addressed before closing"
+        - "Provide clear next steps and expected timelines"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: refresh-knowledge-context
+      type: inject_correction
+      actions:
+        - "Reload relevant knowledge base articles for the current topic"
+        - "Cross-reference multiple sources for accuracy verification"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: enrich-handoff-context
+      type: inject_correction
+      actions:
+        - "Compile full interaction summary with issue classification"
+        - "Include attempted resolutions and customer sentiment indicators"
+        - "Attach relevant order and account context for receiving agent"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: accelerate-resolution
+      type: inject_correction
+      actions:
+        - "Summarize issue and propose direct resolution path"
+        - "Skip optional information gathering if core issue is clear"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize conversation history to reduce token consumption"
+        - "Retain only essential context for continued interaction"
+      max_attempts: 2
+      fallback: graceful-shutdown-service
+
+    - name: escalate-to-supervisor
+      type: pause_and_escalate
+      actions:
+        - "Transfer to human supervisor with full interaction context"
+        - "Inform customer that a specialist will continue assisting them"
+        - "Log escalation reason and interaction metrics"
+      max_attempts: 1
+      fallback: graceful-shutdown-service
+
+    - name: graceful-shutdown-service
+      type: graceful_shutdown
+      actions:
+        - "Save interaction state and create follow-up ticket"
+        - "Inform customer of alternative contact channels"
+        - "Schedule callback if customer prefers"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.95
+  delta: 0.1
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.90

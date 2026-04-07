@@ -1,0 +1,270 @@
+contractspec: "0.1"
+kind: agent
+name: code-generation
+description: >
+  Behavioral contract for an AI code generation agent that produces source code,
+  refactors existing code, and suggests implementations. Enforces security
+  boundaries including no secrets in output, no malicious patterns, license
+  compliance, and input sanitization. Ensures generated code meets quality,
+  testing, and documentation standards.
+version: "1.0.0"
+
+metadata:
+  author: "Developer Tools Security Team"
+  domain: devtools
+  created: "2026-04-07"
+  tags:
+    - code-generation
+    - developer-tools
+    - security
+    - software-engineering
+
+preconditions:
+  - name: language-context-provided
+    description: >
+      The target programming language and runtime environment must be
+      specified or inferable from context.
+    check:
+      field: context.language_specified
+      equals: true
+
+  - name: project-context-loaded
+    description: >
+      The project structure, dependencies, and coding conventions must
+      be accessible to the agent.
+    check:
+      field: context.project_context_loaded
+      equals: true
+
+  - name: license-registry-available
+    description: >
+      The open-source license compatibility registry must be accessible
+      for dependency validation.
+    check:
+      field: system.license_registry_status
+      equals: "available"
+
+invariants:
+  hard:
+    - name: no-secrets-in-output
+      description: >
+        Generated code must never contain hardcoded API keys, tokens,
+        certificates, or any secret material in the output. This covers
+        runtime secrets that are typically rotated and managed through
+        secret management systems (e.g., AWS Secrets Manager, HashiCorp
+        Vault). Secret leakage in generated code is a top OWASP risk.
+      category: confidentiality
+      check:
+        field: output.secrets_detected
+        equals: false
+
+    - name: no-malicious-code-patterns
+      description: >
+        Generated code must not contain malicious patterns including
+        reverse shells, data exfiltration, crypto miners, or backdoors.
+        AI-generated malicious code is an emerging supply chain attack
+        vector that can compromise entire deployment pipelines.
+      category: security
+      check:
+        field: output.malicious_pattern_detected
+        equals: false
+
+    - name: license-compliance
+      description: >
+        All code snippets and dependencies must comply with the
+        project's license constraints. No GPL in MIT projects, etc.
+        License violations can force open-sourcing proprietary code
+        or result in copyright infringement litigation.
+      category: regulatory_compliance
+      check:
+        field: output.license_violation_detected
+        equals: false
+
+    - name: no-arbitrary-code-execution
+      description: >
+        Generated code must not execute arbitrary commands, eval
+        untrusted input, or spawn unrestricted processes. Arbitrary
+        code execution is the highest-severity vulnerability class
+        and enables complete system compromise.
+      category: security
+      check:
+        field: output.arbitrary_execution_detected
+        equals: false
+
+    - name: input-sanitization-required
+      description: >
+        Any generated code that handles user input must include
+        proper sanitization and validation. Unsanitized input is
+        the root cause of SQL injection, XSS, and command injection
+        vulnerabilities that dominate the OWASP Top 10.
+      category: security
+      check:
+        field: output.unsanitized_input_detected
+        equals: false
+
+    - name: no-hardcoded-credentials
+      description: >
+        Generated code must use environment variables or secret
+        managers for credentials, never inline literals. This covers
+        static credentials like usernames, passwords, and connection
+        strings that are hardcoded directly in source files. Unlike
+        runtime secrets, credentials in code persist in version control
+        history and are difficult to fully revoke after exposure.
+      category: confidentiality
+      check:
+        field: output.hardcoded_credentials_detected
+        equals: false
+
+  soft:
+    - name: code-quality-score
+      description: >
+        Generated code should meet quality standards including
+        readability, naming conventions, and structure. Low-quality
+        generated code accumulates technical debt faster than
+        hand-written code since developers trust it without review.
+      category: output_quality
+      check:
+        field: output.code_quality_score
+        gte: 0.7
+      recovery: refactor-generated-code
+      recovery_window: 2
+
+    - name: test-coverage-suggestion
+      description: >
+        Generated code should include or suggest corresponding unit
+        tests with reasonable coverage. Code without tests is
+        unverifiable and creates regression risk in CI/CD pipelines.
+      category: output_quality
+      check:
+        field: output.test_suggestion_score
+        gte: 0.6
+      recovery: generate-test-stubs
+      recovery_window: 2
+
+    - name: documentation-completeness
+      description: >
+        Generated functions and classes should include docstrings,
+        type hints, and usage examples where appropriate. Undocumented
+        generated code is harder to maintain and review than
+        hand-written code since intent is not obvious.
+      category: output_quality
+      check:
+        field: output.documentation_score
+        gte: 0.6
+      recovery: enrich-documentation
+      recovery_window: 1
+
+    - name: performance-consideration
+      description: >
+        Generated code should avoid known performance anti-patterns
+        (N+1 queries, unbounded loops, excessive allocations).
+        Performance issues in generated code are often invisible
+        until production load exposes them, causing outages.
+      category: output_quality
+      check:
+        field: output.performance_score
+        gte: 0.65
+      recovery: optimize-generated-code
+      recovery_window: 2
+
+    - name: security-best-practices
+      description: >
+        Generated code should follow security best practices including
+        parameterized queries, CSRF protection, and XSS prevention.
+        Security-unaware generated code introduces vulnerabilities at
+        scale across the codebase.
+      category: security
+      check:
+        field: output.security_practices_score
+        gte: 0.7
+      recovery: inject-security-fixes
+      recovery_window: 2
+
+recovery:
+  strategies:
+    - name: refactor-generated-code
+      type: inject_correction
+      actions:
+        - "Apply language-specific linting rules to generated code"
+        - "Refactor for readability and naming conventions"
+      max_attempts: 2
+      fallback: simplify-output
+
+    - name: generate-test-stubs
+      type: inject_correction
+      actions:
+        - "Generate unit test stubs for all public functions"
+        - "Include edge case test suggestions"
+      max_attempts: 1
+
+    - name: enrich-documentation
+      type: inject_correction
+      actions:
+        - "Add docstrings to all public functions and classes"
+        - "Include type annotations and usage examples"
+      max_attempts: 1
+
+    - name: optimize-generated-code
+      type: inject_correction
+      actions:
+        - "Identify and fix performance anti-patterns"
+        - "Suggest caching or batching where applicable"
+      max_attempts: 2
+
+    - name: inject-security-fixes
+      type: inject_correction
+      actions:
+        - "Replace raw queries with parameterized statements"
+        - "Add input validation and output encoding"
+      max_attempts: 2
+      fallback: escalate-to-reviewer
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize conversation history to reduce token usage"
+      max_attempts: 3
+
+    - name: simplify-output
+      type: reduce_autonomy
+      actions:
+        - "Generate minimal implementation without extras"
+        - "Defer documentation and tests to follow-up"
+      max_attempts: 2
+
+    - name: escalate-to-reviewer
+      type: pause_and_escalate
+      actions:
+        - "Flag generated code for human security review"
+        - "Include specific security concerns in review notes"
+      max_attempts: 1
+      fallback: graceful-end
+
+    - name: graceful-end
+      type: graceful_shutdown
+      actions:
+        - "Save generation session state"
+        - "Output partial results with security warnings"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.97
+  delta: 0.08
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.92

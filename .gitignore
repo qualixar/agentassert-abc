@@ -1,0 +1,49 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+*.pyo
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+*.env
+
+# Test/lint artifacts
+.coverage
+htmlcov/
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+
+# Benchmark outputs (regenerated per run; live_benchmark.py has Azure endpoints)
+benchmarks/live_results.json
+benchmarks/live_benchmark.py
+
+# npm claim artifacts (not for public repo)
+claim/
+
+# Internal dev files (never commit)
+.backup/
+
+# Blockchain timestamp proofs (keep in .backup only)
+*.ots
+
+# Lock file — library best practice: do NOT commit uv.lock for libraries
+# (applications should commit it; libraries should not, to avoid pinning transitive deps)
+uv.lock
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

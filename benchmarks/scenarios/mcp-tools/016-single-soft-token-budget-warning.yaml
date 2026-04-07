@@ -1,0 +1,18 @@
+id: mcp-to-016-all-soft-violated
+domain: mcp-tools
+description: 'All soft constraints violated'
+contract: mcp-tool-server
+input_state:
+  output.schema_violation_detected: false
+  output.unauthorized_resource_access: false
+  output.unvalidated_input_processed: false
+  output.rate_limit_bypassed: false
+  output.read_tool_side_effect_detected: false
+  response.latency_ms: 12000
+  output.description_accuracy_score: 0.3
+  output.error_helpfulness_score: 0.2
+  output.resource_leak_detected: true
+expected:
+  hard_violations: 0
+  soft_violations: 4
+  verdict: soft_violation

@@ -1,0 +1,233 @@
+contractspec: "0.1"
+kind: agent
+name: customer-support
+description: >
+  Behavioral contract for a general-purpose AI customer support agent
+  handling inquiries, issue resolution, and service requests across
+  multiple product lines. Ensures data privacy, honest communication,
+  appropriate escalation, and interaction quality.
+version: "1.0.0"
+
+metadata:
+  author: "Customer Support Team"
+  domain: customer-support
+  created: "2026-04-07"
+  tags:
+    - customer-support
+    - general-purpose
+    - issue-resolution
+    - service-desk
+
+preconditions:
+  - name: customer-context-available
+    description: >
+      Basic customer context including account status and interaction
+      history must be available before processing support requests.
+    check:
+      field: context.customer_context_available
+      equals: true
+  - name: support-policies-loaded
+    description: >
+      Current support policies, SLA definitions, and escalation
+      procedures must be loaded and accessible.
+    check:
+      field: context.support_policies_loaded
+      equals: true
+
+invariants:
+  hard:
+    - name: no-pii-disclosure
+      description: >
+        The agent must never disclose personally identifiable information
+        including names, addresses, phone numbers, email addresses, or
+        account numbers to unauthorized parties or in unsecured channels.
+        PII breaches violate GDPR, CCPA, and other data protection
+        regulations, exposing the organization to significant fines
+        and reputational damage.
+      category: confidentiality
+      check:
+        field: output.pii_disclosed
+        equals: false
+
+    - name: no-false-commitments
+      description: >
+        The agent must never make commitments about timelines, outcomes,
+        or compensations that are not authorized or cannot be fulfilled
+        by the organization. False commitments create legal liability
+        and erode customer trust when promises are inevitably broken.
+      category: output_constraints
+      check:
+        field: output.false_commitment_made
+        equals: false
+
+    - name: escalation-on-legal-threats
+      description: >
+        The agent must immediately escalate to a human supervisor when
+        a customer mentions legal action, regulatory complaints, or
+        threatens litigation. Legal threats require human judgment and
+        proper documentation to protect the organization from
+        liability escalation.
+      category: safety_critical
+      check:
+        field: output.legal_threat_escalation_missed
+        equals: false
+
+    - name: audit-trail-required
+      description: >
+        All customer interactions, decisions, and actions must be
+        logged with timestamps and agent identifiers for compliance
+        and quality audit purposes. Audit trails are mandatory under
+        SOC 2, ISO 27001, and most enterprise compliance frameworks.
+      category: regulatory_compliance
+      check:
+        field: output.audit_trail_maintained
+        equals: true
+
+    - name: no-unauthorized-actions
+      description: >
+        The agent must not perform account modifications, issue credits,
+        or take any action beyond its authorized scope without proper
+        approval workflow. Unauthorized actions bypass financial controls
+        and may constitute fraud under enterprise governance policies.
+      category: action_prohibitions
+      check:
+        field: output.unauthorized_action_taken
+        equals: false
+
+  soft:
+    - name: response-tone-quality
+      description: >
+        All customer-facing responses should maintain a professional,
+        helpful, and appropriately empathetic tone matching the
+        severity and nature of the customer's issue. Poor tone is
+        the leading cause of negative support ratings and social
+        media complaints.
+      category: escalation_rules
+      check:
+        field: output.response_tone_score
+        gte: 0.75
+      recovery: inject-tone-correction
+      recovery_window: 2
+
+    - name: resolution-speed
+      description: >
+        Support issues should be resolved or meaningfully progressed
+        within acceptable time thresholds appropriate for the issue
+        priority level. Slow resolution directly correlates with
+        customer churn and negative word-of-mouth.
+      category: timeout_compliance
+      check:
+        field: output.resolution_speed_score
+        gte: 0.7
+      recovery: accelerate-resolution
+      recovery_window: 2
+
+    - name: answer-accuracy
+      description: >
+        Information and answers provided should be factually accurate,
+        sourced from approved knowledge bases, and relevant to the
+        customer's specific question. Inaccurate answers create
+        liability risk and require costly follow-up corrections.
+      category: output_constraints
+      check:
+        field: output.answer_accuracy_score
+        gte: 0.85
+      recovery: refresh-knowledge-context
+      recovery_window: 2
+
+    - name: customer-effort-score
+      description: >
+        The overall interaction should minimize customer effort,
+        avoiding unnecessary transfers, repeated information requests,
+        or convoluted resolution processes. High-effort interactions
+        are the strongest predictor of customer disloyalty.
+      category: output_constraints
+      check:
+        field: output.customer_effort_score
+        gte: 0.7
+      recovery: streamline-interaction
+      recovery_window: 3
+
+recovery:
+  strategies:
+    - name: inject-tone-correction
+      type: inject_correction
+      actions:
+        - "Inject system prompt reinforcing professional and empathetic tone"
+        - "Provide tone-appropriate response templates for the issue category"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: accelerate-resolution
+      type: inject_correction
+      actions:
+        - "Summarize issue and propose direct resolution path"
+        - "Skip optional information gathering if core issue is identified"
+        - "Prioritize most common resolution for the issue pattern"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: refresh-knowledge-context
+      type: inject_correction
+      actions:
+        - "Reload relevant knowledge base articles for the current topic"
+        - "Cross-reference multiple sources to verify accuracy"
+        - "Flag low-confidence answers for human review"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: streamline-interaction
+      type: inject_correction
+      actions:
+        - "Consolidate remaining questions into a single clarification request"
+        - "Eliminate redundant verification steps"
+        - "Provide self-service options where applicable"
+      max_attempts: 2
+      fallback: escalate-to-supervisor
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize conversation history to reduce token consumption"
+        - "Retain essential context and resolution progress"
+      max_attempts: 2
+      fallback: graceful-shutdown-support
+
+    - name: escalate-to-supervisor
+      type: pause_and_escalate
+      actions:
+        - "Transfer to human supervisor with full interaction context"
+        - "Include issue summary, actions attempted, and customer sentiment"
+        - "Inform customer that a specialist will continue assisting"
+      max_attempts: 1
+      fallback: graceful-shutdown-support
+
+    - name: graceful-shutdown-support
+      type: graceful_shutdown
+      actions:
+        - "Save interaction state and create follow-up ticket"
+        - "Provide customer with ticket reference number"
+        - "Inform customer of expected follow-up timeline"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.95
+  delta: 0.1
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.90

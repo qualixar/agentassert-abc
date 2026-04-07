@@ -1,0 +1,23 @@
+id: rag-ag-001-001-fully-compliant
+domain: rag-agents
+description: All constraints satisfied
+contract: rag-agent
+input_state:
+  output.hallucination_detected: false
+  output.uncited_answer_detected: false
+  output.irrelevant_chunk_included: false
+  output.pii_in_context_detected: false
+  output.query_answer_misaligned: false
+  output.stale_data_served: false
+  tools.all_calls_authorized: true
+  output.retrieval_precision_score: 0.8
+  output.answer_completeness_score: 0.75
+  output.source_diversity_score: 0.6
+  output.coherence_score: 0.8
+  output.confidence_calibration_score: 0.7
+  session.total_tokens: 17500
+  response.latency_ms: 4000
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: compliant

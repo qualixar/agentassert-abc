@@ -1,0 +1,24 @@
+id: "ecommerce-037-total-failure"
+domain: "ecommerce"
+description: "Total failure - all hard and soft constraints violated"
+contract: "ecommerce-product-recommendation"
+input_state:
+  output.competitor_reference_detected: true
+  output.unverified_availability_claim: true
+  output.unauthorized_discount_offered: true
+  output.pii_detected: true
+  output.sponsored_items_disclosed: false
+  output.undisclosed_dynamic_pricing: true
+  tools.all_calls_authorized: false
+  output.brand_tone_score: 0.30
+  output.recommendation_relevance_score: 0.20
+  output.completeness_score: 0.25
+  output.upsell_count: 8
+  response.latency_ms: 10000
+  output.customer_satisfaction_score: 0.10
+  session.total_tokens: 60000
+  session.total_cost_usd: 6.00
+expected:
+  hard_violations: 7
+  soft_violations: 8
+  verdict: "hard_breach"

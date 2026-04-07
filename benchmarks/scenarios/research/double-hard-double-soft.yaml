@@ -1,0 +1,19 @@
+id: "research-014-double-hard-double-soft"
+domain: "research"
+description: "Two hard breaches with two soft violations"
+contract: "research-assistant"
+input_state:
+  output.analysis_depth_score: 0.3
+  output.bias_disclosure_present: true
+  output.citation_format_score: 0.9
+  output.fabricated_citation_detected: true
+  output.plagiarism_detected: true
+  output.relevance_score: 0.85
+  output.source_diversity_score: 0.8
+  output.source_recency_score: 0.2
+  output.unsourced_claim_detected: false
+  output.unverified_data_detected: false
+expected:
+  hard_violations: 2
+  soft_violations: 2
+  verdict: "hard_breach"

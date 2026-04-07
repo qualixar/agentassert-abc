@@ -1,0 +1,320 @@
+contractspec: "0.1"
+kind: agent
+name: retail-shopping-assistant
+description: >
+  Behavioral contract for an AI agent assisting customers with retail shopping
+  including product discovery, style recommendations, size guidance, price
+  comparisons, and purchase decisions. Ensures product accuracy, inclusive
+  recommendations, and policy compliance.
+version: "1.0.0"
+
+metadata:
+  author: "Retail Experience Team"
+  domain: retail
+  created: "2026-04-07"
+  tags:
+    - retail
+    - shopping-assistant
+    - product-recommendation
+    - personalization
+
+preconditions:
+  - name: product-catalog-loaded
+    description: >
+      The agent must have access to the current product catalog with
+      accurate pricing, availability, and product attributes before
+      assisting customers.
+    check:
+      field: context.product_catalog_loaded
+      equals: true
+  - name: customer-preferences-available
+    description: >
+      Customer preference data including past purchases, browsing
+      history, and stated preferences should be accessible for
+      personalized recommendations.
+    check:
+      field: context.customer_preferences_available
+      equals: true
+  - name: return-policy-loaded
+    description: >
+      Current return and exchange policies must be loaded and
+      accessible for accurate customer guidance.
+    check:
+      field: context.return_policy_loaded
+      equals: true
+
+invariants:
+  hard:
+    - name: no-counterfeit-promotion
+      description: >
+        The agent must never recommend, promote, or facilitate the
+        purchase of counterfeit, replica, or unauthorized products.
+        All recommended products must be from verified suppliers.
+        Promoting counterfeits violates trademark law and exposes
+        the platform to brand lawsuits and marketplace delistings.
+      category: action_prohibitions
+      check:
+        field: output.counterfeit_promoted
+        equals: false
+
+    - name: price-accuracy
+      description: >
+        All prices displayed or communicated must match the current
+        system price. The agent must never quote incorrect prices
+        or fabricate promotional pricing.
+      category: output_constraints
+      check:
+        field: output.price_mismatch_detected
+        equals: false
+
+    - name: return-policy-compliance
+      description: >
+        All return and exchange guidance must accurately reflect
+        current store policies. The agent must never promise return
+        terms that differ from established policy.
+      category: regulatory_compliance
+      check:
+        field: output.return_policy_violated
+        equals: false
+
+    - name: age-restricted-item-verification
+      description: >
+        The agent must enforce age verification requirements for
+        restricted products including alcohol, tobacco, and other
+        age-gated categories before facilitating purchase.
+      category: regulatory_compliance
+      check:
+        field: output.age_verification_skipped
+        equals: false
+
+    - name: no-discriminatory-recommendations
+      description: >
+        Product recommendations must not discriminate based on
+        race, gender, religion, disability, or any protected
+        characteristic. Recommendations must be based solely on
+        stated preferences and shopping behavior.
+      category: role_boundaries
+      check:
+        field: output.discriminatory_recommendation_detected
+        equals: false
+
+    - name: inventory-accuracy
+      description: >
+        The agent must never represent a product as available when
+        it is out of stock. Availability information must be verified
+        against real-time inventory data.
+      category: output_constraints
+      check:
+        field: output.inventory_misrepresented
+        equals: false
+
+  soft:
+    - name: personalization-relevance
+      description: >
+        Product recommendations should be relevant to the customer's
+        stated needs, preferences, and shopping context. Irrelevant
+        recommendations waste customer time and reduce conversion rates,
+        directly impacting revenue per session.
+      category: output_constraints
+      check:
+        field: output.personalization_relevance_score
+        gte: 0.75
+      recovery: refine-preference-model
+      recovery_window: 2
+
+    - name: style-consistency
+      description: >
+        Fashion and style recommendations should maintain consistency
+        with the customer's expressed style preferences and existing
+        wardrobe context. Inconsistent style suggestions undermine the
+        agent's credibility as a personal shopping assistant.
+      category: output_constraints
+      check:
+        field: output.style_consistency_score
+        gte: 0.7
+      recovery: reload-style-profile
+      recovery_window: 2
+
+    - name: budget-adherence
+      description: >
+        Recommendations should respect the customer's stated or
+        inferred budget constraints, with appropriate alternatives
+        when primary choices exceed budget. Showing out-of-budget
+        items feels tone-deaf and drives customers to competitors.
+      category: output_constraints
+      check:
+        field: output.budget_adherence_score
+        gte: 0.8
+      recovery: apply-budget-filter
+      recovery_window: 2
+
+    - name: seasonal-appropriateness
+      description: >
+        Product suggestions should account for seasonal relevance,
+        weather patterns, and upcoming occasions when applicable.
+        Out-of-season recommendations indicate poor contextual
+        awareness and reduce trust in the AI assistant.
+      category: timeout_compliance
+      check:
+        field: output.seasonal_appropriateness_score
+        gte: 0.7
+      recovery: inject-seasonal-context
+      recovery_window: 3
+
+    - name: cross-sell-relevance
+      description: >
+        Cross-sell and complementary product suggestions should be
+        genuinely useful and related to the customer's current
+        selection, not random promotional items. Irrelevant cross-sells
+        feel spammy and reduce basket completion rates.
+      category: output_constraints
+      check:
+        field: output.cross_sell_relevance_score
+        gte: 0.7
+      recovery: refine-cross-sell-logic
+      recovery_window: 2
+
+    - name: size-recommendation-accuracy
+      description: >
+        Size recommendations should be accurate based on available
+        sizing data, brand-specific fit information, and customer
+        measurement data when provided. Incorrect sizing is the leading
+        cause of returns, which cost 2-3x the shipping expense.
+      category: output_constraints
+      check:
+        field: output.size_accuracy_score
+        gte: 0.8
+      recovery: enhance-sizing-data
+      recovery_window: 3
+
+    - name: availability-notification
+      description: >
+        When desired products are unavailable, the agent should
+        proactively offer back-in-stock notifications and suggest
+        comparable alternatives. Failing to offer alternatives for
+        out-of-stock items loses the sale entirely to competitors.
+      category: escalation_rules
+      check:
+        field: output.availability_notification_score
+        gte: 0.75
+      recovery: enable-stock-alerts
+      recovery_window: 2
+
+recovery:
+  strategies:
+    - name: refine-preference-model
+      type: inject_correction
+      actions:
+        - "Reload customer preference signals from browsing and purchase history"
+        - "Ask clarifying questions to better understand current needs"
+        - "Weight recent interactions more heavily in recommendation model"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: reload-style-profile
+      type: inject_correction
+      actions:
+        - "Refresh customer style profile from past purchases and saved items"
+        - "Apply style clustering to identify consistent preferences"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: apply-budget-filter
+      type: inject_correction
+      actions:
+        - "Apply strict budget ceiling to all product recommendations"
+        - "Prioritize value alternatives within budget range"
+        - "Clearly communicate when premium options exceed stated budget"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: inject-seasonal-context
+      type: inject_correction
+      actions:
+        - "Load current season and weather data for customer's location"
+        - "Filter recommendations for seasonal appropriateness"
+        - "Highlight upcoming event-relevant products"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: refine-cross-sell-logic
+      type: inject_correction
+      actions:
+        - "Analyze current cart items for genuine complementary products"
+        - "Filter out unrelated promotional cross-sell items"
+        - "Prioritize accessories and complements over random suggestions"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: enhance-sizing-data
+      type: inject_correction
+      actions:
+        - "Load brand-specific sizing charts and fit guides"
+        - "Cross-reference with customer's previous purchase sizes and returns"
+        - "Recommend size with confidence interval and fit notes"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: enable-stock-alerts
+      type: inject_correction
+      actions:
+        - "Register back-in-stock notification for desired items"
+        - "Search for comparable alternatives from available inventory"
+        - "Check nearby store availability if applicable"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: diversify-recommendations
+      type: inject_correction
+      actions:
+        - "Ensure recommendations span at least three different brands"
+        - "Include options across the customer's budget spectrum"
+      max_attempts: 2
+      fallback: escalate-to-stylist
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize shopping session context to reduce token usage"
+        - "Retain key preferences and selections in compressed format"
+      max_attempts: 2
+      fallback: graceful-shutdown-shopping
+
+    - name: escalate-to-stylist
+      type: pause_and_escalate
+      actions:
+        - "Transfer to human personal shopper or stylist with session context"
+        - "Include customer preferences, budget, and items viewed"
+        - "Inform customer that a specialist will assist them"
+      max_attempts: 1
+      fallback: graceful-shutdown-shopping
+
+    - name: graceful-shutdown-shopping
+      type: graceful_shutdown
+      actions:
+        - "Save shopping session with cart, wishlist, and preferences"
+        - "Provide session recovery link for customer to resume later"
+        - "Suggest alternative contact channels for continued assistance"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.95
+  delta: 0.1
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.90

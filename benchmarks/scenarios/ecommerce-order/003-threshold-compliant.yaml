@@ -1,0 +1,21 @@
+id: "ecom-order-003-threshold-compliant"
+domain: "ecommerce-order"
+description: "All soft scores exactly at threshold"
+contract: "ecommerce-order-management"
+input_state:
+  output.canceled_order_fulfilled: false
+  output.communication_tone_score: 0.75
+  output.confirmation_speed_score: 0.8
+  output.inventory_check_skipped: false
+  output.order_status_mismatch: false
+  output.payment_data_exposed: false
+  output.price_override_attempted: false
+  output.repeat_issue_escalation_rate: 0.9
+  output.shipping_estimate_accuracy: 0.85
+  output.tracking_completeness_score: 0.8
+  output.unauthorized_refund_issued: false
+  output.upsell_relevance_score: 0.7
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: "compliant"

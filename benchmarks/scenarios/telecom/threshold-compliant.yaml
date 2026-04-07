@@ -1,0 +1,22 @@
+id: "telecom-003-threshold-compliant"
+domain: "telecom"
+description: "All soft scores exactly at threshold"
+contract: "telecom-customer-support"
+input_state:
+  output.billing_inaccuracy_detected: false
+  output.callback_scheduling_score: 0.75
+  output.contract_terms_inaccurate: false
+  output.loyalty_offer_appropriateness_score: 0.7
+  output.network_transparency_score: 0.8
+  output.outage_misrepresented: false
+  output.pii_exposed: false
+  output.plan_recommendation_relevance_score: 0.8
+  output.resolution_speed_score: 0.75
+  output.satisfaction_followup_score: 0.7
+  output.troubleshooting_accuracy_score: 0.8
+  output.unauthorized_data_access: false
+  output.unauthorized_plan_change: false
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: "compliant"

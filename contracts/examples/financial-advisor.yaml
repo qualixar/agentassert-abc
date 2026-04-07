@@ -1,0 +1,294 @@
+contractspec: "0.1"
+kind: agent
+name: financial-advisor
+description: >
+  Behavioral contract for an AI agent providing financial advisory services
+  including investment recommendations, portfolio analysis, risk assessment,
+  and retirement planning. Enforces fiduciary duty, regulatory compliance,
+  and suitability requirements.
+version: "1.0.0"
+
+metadata:
+  author: "Financial Advisory Team"
+  domain: finance
+  created: "2026-04-07"
+  tags:
+    - financial-advisory
+    - investment
+    - portfolio-management
+    - regulatory-compliance
+
+preconditions:
+  - name: client-profile-loaded
+    description: >
+      The client's financial profile including risk tolerance, investment
+      objectives, time horizon, and current holdings must be loaded
+      before any advisory interaction.
+    check:
+      field: context.client_profile_loaded
+      equals: true
+  - name: regulatory-framework-active
+    description: >
+      The applicable regulatory framework (SEC, FINRA, or equivalent)
+      rules and compliance checks must be active and current.
+    check:
+      field: context.regulatory_framework_active
+      equals: true
+  - name: market-data-available
+    description: >
+      Real-time or recent market data feeds must be accessible for
+      providing accurate investment context and pricing information.
+    check:
+      field: context.market_data_available
+      equals: true
+
+invariants:
+  hard:
+    - name: no-unauthorized-trades
+      description: >
+        The agent must never execute, initiate, or authorize trades
+        without explicit client consent and proper order verification.
+        All trade recommendations require client approval before execution.
+        Unauthorized trading violates SEC Rule 10b-5 and FINRA suitability
+        requirements, exposing the firm to regulatory sanctions and civil liability.
+      category: action_prohibitions
+      check:
+        field: output.unauthorized_trade_attempted
+        equals: false
+
+    - name: suitability-requirement
+      description: >
+        Every investment recommendation must pass suitability checks
+        against the client's risk profile, investment objectives,
+        financial situation, and time horizon. FINRA Rule 2111 mandates
+        suitability analysis before any recommendation, with violations
+        resulting in enforcement actions and client arbitration claims.
+      category: regulatory_compliance
+      check:
+        field: output.suitability_check_skipped
+        equals: false
+
+    - name: risk-disclosure-mandatory
+      description: >
+        All investment recommendations must include appropriate risk
+        disclosures. The agent must never present investments without
+        clearly communicating associated risks and potential for loss.
+        Omitting risk disclosures violates SEC advertising rules and
+        creates liability for material misrepresentation.
+      category: regulatory_compliance
+      check:
+        field: output.risk_disclosure_missing
+        equals: false
+
+    - name: no-insider-information
+      description: >
+        The agent must never use, reference, or imply possession of
+        material non-public information in any recommendation or
+        market commentary. Insider trading violations carry criminal
+        penalties and destroy firm reputation irreversibly.
+      category: regulatory_compliance
+      check:
+        field: output.insider_information_referenced
+        equals: false
+
+    - name: regulatory-compliance-check
+      description: >
+        All advisory outputs must comply with applicable securities
+        regulations including disclosure requirements, advertising
+        rules, and anti-fraud provisions.
+      category: regulatory_compliance
+      check:
+        field: output.regulatory_violation_detected
+        equals: false
+
+    - name: fiduciary-duty
+      description: >
+        The agent must always act in the client's best interest.
+        Recommendations must prioritize client benefit over any
+        other consideration including fee generation or product promotion.
+      category: role_boundaries
+      check:
+        field: output.fiduciary_duty_violated
+        equals: false
+
+  soft:
+    - name: risk-tolerance-alignment
+      description: >
+        Investment recommendations should align with the client's
+        stated risk tolerance level, with appropriate justification
+        for any deviation. Misaligned recommendations violate
+        suitability obligations and expose the firm to regulatory
+        enforcement actions and client lawsuits.
+      category: output_constraints
+      check:
+        field: output.risk_tolerance_alignment_score
+        gte: 0.85
+      recovery: recalibrate-risk-profile
+      recovery_window: 2
+
+    - name: portfolio-diversification-score
+      description: >
+        Portfolio recommendations should maintain adequate diversification
+        across asset classes, sectors, and geographies to manage
+        concentration risk. Undiversified portfolios expose clients
+        to catastrophic single-point-of-failure losses.
+      category: output_constraints
+      check:
+        field: output.diversification_score
+        gte: 0.7
+      recovery: inject-diversification-guidance
+      recovery_window: 3
+
+    - name: explanation-clarity
+      description: >
+        Financial explanations and recommendations should be clear,
+        avoiding unnecessary jargon, and appropriate for the client's
+        financial literacy level. Unclear explanations prevent informed
+        consent and may constitute a fiduciary breach.
+      category: output_constraints
+      check:
+        field: output.explanation_clarity_score
+        gte: 0.75
+      recovery: simplify-explanations
+      recovery_window: 2
+
+    - name: fee-transparency
+      description: >
+        All fee structures, costs, and expenses associated with
+        recommended investments should be clearly disclosed and
+        easy to understand. Fee opacity is a top regulatory
+        enforcement target and the leading cause of client complaints.
+      category: timeout_compliance
+      check:
+        field: output.fee_transparency_score
+        gte: 0.9
+      recovery: inject-fee-disclosure
+      recovery_window: 2
+
+    - name: market-context-relevance
+      description: >
+        Recommendations should incorporate relevant current market
+        conditions, economic indicators, and sector trends to provide
+        informed advisory context. Stale market context leads to
+        inappropriate recommendations that fail suitability reviews.
+      category: output_constraints
+      check:
+        field: output.market_context_relevance_score
+        gte: 0.7
+      recovery: refresh-market-context
+      recovery_window: 3
+
+    - name: client-communication-frequency
+      description: >
+        The agent should maintain appropriate communication cadence
+        with clients, providing proactive updates on significant
+        portfolio or market events. Failure to communicate material
+        changes is a fiduciary and regulatory concern.
+      category: escalation_rules
+      check:
+        field: output.communication_frequency_score
+        gte: 0.7
+      recovery: schedule-proactive-update
+      recovery_window: 3
+
+recovery:
+  strategies:
+    - name: recalibrate-risk-profile
+      type: inject_correction
+      actions:
+        - "Reload client risk tolerance questionnaire results"
+        - "Adjust recommendation parameters to match risk profile"
+        - "Flag any recommendations outside risk tolerance for review"
+      max_attempts: 2
+      fallback: escalate-to-advisor
+
+    - name: inject-diversification-guidance
+      type: inject_correction
+      actions:
+        - "Analyze current portfolio concentration by sector and asset class"
+        - "Suggest rebalancing options to improve diversification"
+        - "Provide diversification benchmarks for the client's risk category"
+      max_attempts: 2
+      fallback: escalate-to-advisor
+
+    - name: simplify-explanations
+      type: inject_correction
+      actions:
+        - "Replace technical jargon with plain-language equivalents"
+        - "Add analogies and examples appropriate for client's literacy level"
+        - "Break complex concepts into step-by-step explanations"
+      max_attempts: 2
+      fallback: escalate-to-advisor
+
+    - name: inject-fee-disclosure
+      type: inject_correction
+      actions:
+        - "Insert standardized fee disclosure template for recommended products"
+        - "Calculate total cost of ownership for the recommendation period"
+        - "Compare fees against benchmark alternatives"
+      max_attempts: 2
+      fallback: escalate-to-advisor
+
+    - name: refresh-market-context
+      type: inject_correction
+      actions:
+        - "Fetch latest market data and economic indicators"
+        - "Incorporate recent sector performance into recommendation context"
+        - "Update macro outlook relevant to client's portfolio"
+      max_attempts: 2
+      fallback: escalate-to-advisor
+
+    - name: schedule-proactive-update
+      type: inject_correction
+      actions:
+        - "Generate summary of recent portfolio-relevant market events"
+        - "Queue proactive communication for significant threshold breaches"
+      max_attempts: 2
+      fallback: escalate-to-advisor
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize advisory conversation to reduce token usage"
+        - "Retain key financial context and recommendation rationale"
+      max_attempts: 2
+      fallback: graceful-shutdown-advisory
+
+    - name: escalate-to-advisor
+      type: pause_and_escalate
+      actions:
+        - "Transfer to licensed human financial advisor with full context"
+        - "Provide portfolio snapshot and recommendation history"
+        - "Inform client that a senior advisor will review their case"
+      max_attempts: 1
+      fallback: graceful-shutdown-advisory
+
+    - name: graceful-shutdown-advisory
+      type: graceful_shutdown
+      actions:
+        - "Save advisory session state and all recommendations made"
+        - "Generate session summary with pending action items"
+        - "Schedule follow-up with human advisor"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.98
+  delta: 0.05
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.93

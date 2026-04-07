@@ -1,0 +1,21 @@
+id: "ecom-order-015-all-soft-just-below"
+domain: "ecommerce-order"
+description: "All soft scores just below thresholds"
+contract: "ecommerce-order-management"
+input_state:
+  output.canceled_order_fulfilled: false
+  output.communication_tone_score: 0.74
+  output.confirmation_speed_score: 0.79
+  output.inventory_check_skipped: false
+  output.order_status_mismatch: false
+  output.payment_data_exposed: false
+  output.price_override_attempted: false
+  output.repeat_issue_escalation_rate: 0.89
+  output.shipping_estimate_accuracy: 0.84
+  output.tracking_completeness_score: 0.79
+  output.unauthorized_refund_issued: false
+  output.upsell_relevance_score: 0.69
+expected:
+  hard_violations: 0
+  soft_violations: 6
+  verdict: "soft_violation"

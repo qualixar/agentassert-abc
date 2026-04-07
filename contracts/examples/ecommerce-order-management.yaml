@@ -1,0 +1,281 @@
+contractspec: "0.1"
+kind: agent
+name: ecommerce-order-management
+description: >
+  Behavioral contract for an AI agent managing e-commerce order lifecycle operations
+  including order placement, fulfillment, refunds, shipping, and customer communications.
+  Ensures transactional integrity, payment security, and inventory consistency.
+version: "1.0.0"
+
+metadata:
+  author: "E-Commerce Operations Team"
+  domain: ecommerce
+  created: "2026-04-07"
+  tags:
+    - order-management
+    - ecommerce
+    - fulfillment
+    - payments
+
+preconditions:
+  - name: order-context-available
+    description: >
+      The agent must have access to the current order context including
+      order ID, customer ID, and order status before processing any request.
+      Without this context, the agent cannot verify order ownership or
+      determine appropriate actions for the customer's situation.
+    check:
+      field: context.order_context_loaded
+      equals: true
+  - name: payment-gateway-connected
+    description: >
+      A valid connection to the payment gateway must be established
+      before any refund or payment-related operations. This prevents
+      partial transaction states that could result in financial discrepancies
+      or double-charges to customer accounts.
+    check:
+      field: context.payment_gateway_connected
+      equals: true
+  - name: inventory-system-available
+    description: >
+      The inventory management system must be accessible for stock
+      verification and synchronization operations. Without real-time
+      inventory data, the agent risks confirming orders for out-of-stock
+      items, leading to customer dissatisfaction and operational overhead.
+    check:
+      field: context.inventory_system_available
+      equals: true
+
+invariants:
+  hard:
+    - name: no-unauthorized-refunds
+      description: >
+        The agent must never issue refunds without proper authorization.
+        All refunds require manager approval above a configurable threshold
+        and must follow the refund policy guidelines. Unauthorized refunds
+        expose the organization to financial loss and potential fraud, and
+        violate SOX compliance requirements for financial controls.
+      category: action_prohibitions
+      check:
+        field: output.unauthorized_refund_issued
+        equals: false
+
+    - name: no-price-override
+      description: >
+        The agent must never override product prices, apply unauthorized
+        discounts, or modify pricing outside of approved promotion rules.
+        Price integrity is critical for revenue protection and regulatory
+        compliance with consumer pricing laws.
+      category: action_prohibitions
+      check:
+        field: output.price_override_attempted
+        equals: false
+
+    - name: order-status-accuracy
+      description: >
+        The agent must never misrepresent the current status of an order.
+        All status information communicated to customers must match the
+        actual order state in the system. Inaccurate status information
+        erodes customer trust and generates unnecessary support contacts.
+      category: output_constraints
+      check:
+        field: output.order_status_mismatch
+        equals: false
+
+    - name: payment-data-protection
+      description: >
+        The agent must never expose, log, or transmit full payment card
+        numbers, CVVs, or other sensitive payment data in any response
+        or internal processing step. Violations constitute PCI-DSS
+        non-compliance and may result in payment processor penalties,
+        fines, and loss of card processing privileges.
+      category: confidentiality
+      check:
+        field: output.payment_data_exposed
+        equals: false
+
+    - name: inventory-sync-required
+      description: >
+        The agent must never confirm an order or promise availability
+        without verifying current inventory levels. Stock checks must
+        be real-time, not cached. Selling unavailable items leads to
+        backorders, cancellations, and negative customer experiences.
+      category: output_constraints
+      check:
+        field: output.inventory_check_skipped
+        equals: false
+
+    - name: no-canceled-order-fulfillment
+      description: >
+        The agent must never initiate or continue fulfillment for orders
+        that have been canceled. Canceled orders must be treated as
+        terminal and immutable. Fulfilling canceled orders creates
+        shipping waste, return logistics burden, and billing disputes.
+      category: action_prohibitions
+      check:
+        field: output.canceled_order_fulfilled
+        equals: false
+
+  soft:
+    - name: order-confirmation-speed
+      description: >
+        Order confirmation messages should be generated and sent within
+        acceptable response time thresholds to maintain customer satisfaction.
+        Delayed confirmations increase customer anxiety and drive unnecessary
+        support contacts to verify order placement.
+      category: timeout_compliance
+      check:
+        field: output.confirmation_speed_score
+        gte: 0.8
+      recovery: optimize-response-pipeline
+      recovery_window: 2
+
+    - name: shipping-estimate-accuracy
+      description: >
+        Shipping time estimates provided to customers should be accurate
+        within acceptable margins based on carrier data and location.
+        Inaccurate estimates damage trust and increase "where is my order"
+        contact volume, which is the top driver of support costs.
+      category: output_constraints
+      check:
+        field: output.shipping_estimate_accuracy
+        gte: 0.85
+      recovery: recalibrate-shipping-estimates
+      recovery_window: 3
+
+    - name: upsell-relevance
+      description: >
+        Any product recommendations or upsell suggestions should be
+        relevant to the customer's current order and purchase history.
+        Irrelevant upsells feel spammy and reduce conversion rates while
+        damaging the perception of personalization quality.
+      category: output_constraints
+      check:
+        field: output.upsell_relevance_score
+        gte: 0.7
+      recovery: refine-recommendation-context
+      recovery_window: 2
+
+    - name: customer-communication-tone
+      description: >
+        All customer-facing communications should maintain a professional,
+        helpful, and empathetic tone appropriate for the order context.
+        Poor tone in order communications directly impacts NPS scores
+        and customer lifetime value.
+      category: escalation_rules
+      check:
+        field: output.communication_tone_score
+        gte: 0.75
+      recovery: inject-tone-correction
+      recovery_window: 2
+
+    - name: order-tracking-completeness
+      description: >
+        Order tracking information provided should be comprehensive,
+        including carrier, tracking number, estimated delivery, and
+        current shipment status. Incomplete tracking forces customers
+        to contact support for information that should be self-service.
+      category: output_constraints
+      check:
+        field: output.tracking_completeness_score
+        gte: 0.8
+      recovery: enrich-tracking-data
+      recovery_window: 3
+
+    - name: escalation-on-repeat-issues
+      description: >
+        When a customer contacts about the same issue multiple times,
+        the agent should escalate to a human representative proactively.
+        Repeat contacts indicate the automated resolution failed and
+        continued AI handling risks customer churn.
+      category: escalation_rules
+      check:
+        field: output.repeat_issue_escalation_rate
+        gte: 0.9
+      recovery: flag-for-escalation
+      recovery_window: 2
+
+recovery:
+  strategies:
+    - name: optimize-response-pipeline
+      type: inject_correction
+      actions:
+        - "Reduce unnecessary context retrieval steps"
+        - "Cache frequently accessed order data for the session"
+        - "Streamline response generation by removing redundant checks"
+      max_attempts: 2
+      fallback: flag-for-escalation
+
+    - name: recalibrate-shipping-estimates
+      type: inject_correction
+      actions:
+        - "Refresh carrier API data for current shipping lanes"
+        - "Apply location-specific delivery time adjustments"
+        - "Add buffer time for known delay corridors"
+      max_attempts: 2
+      fallback: flag-for-escalation
+
+    - name: refine-recommendation-context
+      type: inject_correction
+      actions:
+        - "Reload customer purchase history and preferences"
+        - "Filter recommendations by current order category"
+        - "Apply collaborative filtering with similar customer profiles"
+      max_attempts: 2
+      fallback: flag-for-escalation
+
+    - name: inject-tone-correction
+      type: inject_correction
+      actions:
+        - "Inject system prompt reinforcing professional and empathetic tone"
+        - "Provide exemplar responses for the current order scenario"
+      max_attempts: 2
+      fallback: flag-for-escalation
+
+    - name: enrich-tracking-data
+      type: inject_correction
+      actions:
+        - "Query carrier API for latest shipment status"
+        - "Supplement tracking with estimated delivery window"
+        - "Include link to carrier tracking page"
+      max_attempts: 2
+      fallback: flag-for-escalation
+
+    - name: flag-for-escalation
+      type: pause_and_escalate
+      actions:
+        - "Flag the interaction for human agent review"
+        - "Preserve full conversation context for handoff"
+        - "Notify the customer that a specialist will follow up"
+      max_attempts: 1
+      fallback: graceful-shutdown-order
+
+    - name: graceful-shutdown-order
+      type: graceful_shutdown
+      actions:
+        - "Save current order state and interaction log"
+        - "Inform the customer that the session will be transferred"
+        - "Create a support ticket with full context for follow-up"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.95
+  delta: 0.1
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.90

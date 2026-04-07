@@ -1,0 +1,300 @@
+contractspec: "0.1"
+kind: agent
+name: ecommerce-product-recommendation
+description: >
+  Behavioral contract for an AI product recommendation agent that suggests
+  products to customers based on browsing history, purchase patterns, and
+  preferences. Enforces brand guidelines, inventory accuracy, sponsored
+  product disclosure, customer data protection, and fair pricing practices.
+version: "1.0.0"
+
+metadata:
+  author: "E-commerce Platform Trust & Safety Team"
+  domain: ecommerce
+  created: "2026-02-22"
+  tags:
+    - ecommerce
+    - product-recommendation
+    - customer-privacy
+    - sponsored-disclosure
+    - pricing-transparency
+    - brand-integrity
+
+preconditions:
+  - name: customer-session-valid
+    description: >
+      The customer must have a valid session with an authenticated or
+      guest identifier.
+    check:
+      field: session.customer_identified
+      equals: true
+
+  - name: product-catalog-loaded
+    description: >
+      The product catalog service must be accessible.
+    check:
+      field: system.catalog_service_status
+      equals: "available"
+
+  - name: promotion-list-current
+    description: >
+      The approved promotions list must be loaded and current.
+    check:
+      field: context.promotions_loaded
+      equals: true
+
+invariants:
+  hard:
+    - name: no-competitor-products
+      description: >
+        The agent must not recommend products from competitor platforms.
+        Competitor referrals represent a direct revenue leak and violate
+        the platform's exclusive marketplace agreements with sellers.
+      category: role_boundaries
+      check:
+        field: output.competitor_reference_detected
+        equals: false
+
+    - name: no-false-availability
+      description: >
+        The agent must not claim a product is in stock if unverified.
+        False availability claims lead to failed orders, customer
+        frustration, and increased return/cancellation processing costs.
+      category: output_constraints
+      check:
+        field: output.unverified_availability_claim
+        equals: false
+
+    - name: no-unauthorized-discounts
+      description: >
+        The agent must not offer unapproved discounts. Unauthorized
+        discounts erode margins and create pricing inconsistency that
+        damages brand trust and seller relationships.
+      category: action_prohibitions
+      check:
+        field: output.unauthorized_discount_offered
+        equals: false
+
+    - name: no-pii-leak
+      description: >
+        The agent must never expose customer personally identifiable
+        information including names, addresses, phone numbers, email
+        addresses, or payment details. Violations may result in
+        regulatory penalties under GDPR/CCPA.
+      category: confidentiality
+      check:
+        field: output.pii_detected
+        equals: false
+
+    - name: sponsored-disclosure
+      description: >
+        Sponsored products must be clearly disclosed to customers.
+        FTC guidelines require transparent labeling of paid placements
+        and sponsored content to prevent deceptive advertising practices.
+      category: regulatory_compliance
+      check:
+        field: output.sponsored_items_disclosed
+        equals: true
+
+    - name: no-price-manipulation
+      description: >
+        The agent must not engage in undisclosed dynamic pricing or
+        price discrimination. All pricing must be transparent and
+        consistent with displayed catalog prices to comply with
+        consumer protection regulations.
+      category: regulatory_compliance
+      check:
+        field: output.undisclosed_dynamic_pricing
+        equals: false
+
+  soft:
+    - name: brand-tone
+      description: >
+        Maintain brand-appropriate tone in all customer interactions.
+        Inconsistent tone damages brand identity and reduces customer
+        trust in the recommendation agent.
+      category: role_boundaries
+      check:
+        field: output.brand_tone_score
+        gte: 0.7
+      recovery: inject-tone-correction
+      recovery_window: 2
+
+    - name: recommendation-relevance
+      description: >
+        Recommendations should align with customer preferences and
+        browsing history. Irrelevant recommendations reduce conversion
+        rates and train customers to ignore the recommendation engine.
+      category: output_constraints
+      check:
+        field: output.recommendation_relevance_score
+        gte: 0.6
+      recovery: refine-recommendations
+      recovery_window: 2
+
+    - name: response-completeness
+      description: >
+        Responses should include price, rating, and availability for
+        each recommended product. Incomplete product information forces
+        customers to leave the conversation to look up details, reducing
+        engagement and conversion.
+      category: output_constraints
+      check:
+        field: output.completeness_score
+        gte: 0.6
+      recovery: enrich-product-details
+      recovery_window: 1
+
+    - name: upsell-limit
+      description: >
+        Limit upsell suggestions to 2 per interaction. Excessive
+        upselling feels aggressive and degrades the customer experience,
+        leading to session abandonment and negative brand perception.
+      category: output_constraints
+      check:
+        field: output.upsell_count
+        lte: 2
+      recovery: reduce-upsell
+      recovery_window: 1
+
+    - name: response-latency
+      description: >
+        Response latency should remain under 3000ms for an interactive
+        shopping experience. Slow responses cause customer drop-off,
+        with each additional second reducing conversion probability.
+      category: timeout_compliance
+      check:
+        field: response.latency_ms
+        lte: 3000
+      recovery: simplify-response
+      recovery_window: 2
+
+    - name: escalation-on-complaint
+      description: >
+        Escalate to human support when customer satisfaction drops
+        below threshold. Continued AI interaction with a dissatisfied
+        customer risks deepening frustration and brand damage.
+      category: escalation_rules
+      check:
+        field: output.customer_satisfaction_score
+        gte: 0.4
+      recovery: escalate-to-support
+      recovery_window: 1
+
+governance:
+  hard:
+    - name: no-unauthorized-tools
+      description: >
+        The agent must only use tools from the approved tool registry.
+        Unauthorized tool calls may access restricted data or trigger
+        unintended side effects in production systems.
+      category: action_prohibitions
+      check:
+        field: tools.all_calls_authorized
+        equals: true
+
+  soft:
+    - name: token-budget-warning
+      description: >
+        Monitor token consumption and warn when approaching budget
+        limits. Runaway token usage increases operational costs and
+        may indicate the agent is stuck in a loop.
+      category: token_budgets
+      check:
+        field: session.total_tokens
+        lte: 30000
+      recovery: summarize-and-compress
+      recovery_window: 3
+
+    - name: session-cost-limit
+      description: >
+        Keep total session cost within budget limits to ensure
+        sustainable unit economics. Uncapped session costs can
+        make the recommendation feature unprofitable at scale.
+      category: spending_limits
+      check:
+        field: session.total_cost_usd
+        lte: 2.00
+      recovery: simplify-response
+      recovery_window: 2
+
+recovery:
+  strategies:
+    - name: inject-tone-correction
+      type: inject_correction
+      actions:
+        - "Inject system message: maintain friendly, helpful tone"
+        - "Re-score brand tone before delivery"
+      max_attempts: 2
+      fallback: escalate-to-support
+
+    - name: refine-recommendations
+      type: inject_correction
+      actions:
+        - "Re-query recommendation engine with stricter filters"
+        - "Prioritize items from engaged categories"
+      max_attempts: 2
+      fallback: escalate-to-support
+
+    - name: enrich-product-details
+      type: inject_correction
+      actions:
+        - "Fetch price, rating, availability from catalog"
+      max_attempts: 1
+
+    - name: reduce-upsell
+      type: inject_correction
+      actions:
+        - "Retain top 2 by relevance score, remove others"
+      max_attempts: 1
+
+    - name: simplify-response
+      type: reduce_autonomy
+      actions:
+        - "Use cached recommendations if available"
+        - "Generate concise response with essential details only"
+      max_attempts: 2
+      fallback: escalate-to-support
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize conversation history older than 5 turns"
+      max_attempts: 3
+
+    - name: escalate-to-support
+      type: pause_and_escalate
+      actions:
+        - "Route to available customer service representative"
+        - "Notify customer of handoff"
+      max_attempts: 1
+      fallback: graceful-end
+
+    - name: graceful-end
+      type: graceful_shutdown
+      actions:
+        - "Save session state"
+        - "Notify customer of session end"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.95
+  delta: 0.1
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.90

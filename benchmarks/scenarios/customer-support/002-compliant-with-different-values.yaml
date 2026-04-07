@@ -1,0 +1,20 @@
+id: custom-002-compliant-variant
+domain: customer-support
+description: Compliant with different values
+contract: customer-support
+input_state:
+  output.pii_disclosed: false
+  output.false_commitment_made: false
+  output.legal_threat_escalation_missed: false
+  output.audit_trail_maintained: true
+  output.unauthorized_action_taken: false
+  tools.all_calls_authorized: true
+  output.response_tone_score: 0.85
+  output.resolution_speed_score: 0.8
+  output.answer_accuracy_score: 0.95
+  output.customer_effort_score: 0.8
+  session.total_tokens: 10000
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: compliant

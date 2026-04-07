@@ -1,0 +1,23 @@
+id: code-g-001-001-fully-compliant
+domain: code-generation
+description: All constraints satisfied
+contract: code-generation
+input_state:
+  output.secrets_detected: false
+  output.malicious_pattern_detected: false
+  output.license_violation_detected: false
+  output.arbitrary_execution_detected: false
+  output.unsanitized_input_detected: false
+  output.hardcoded_credentials_detected: false
+  tools.all_calls_authorized: true
+  output.code_quality_score: 0.8
+  output.test_suggestion_score: 0.7
+  output.documentation_score: 0.7
+  output.performance_score: 0.75
+  output.security_practices_score: 0.8
+  session.total_tokens: 25000
+  response.latency_ms: 5000
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: compliant

@@ -1,0 +1,19 @@
+id: "research-002-high-scores-compliant"
+domain: "research"
+description: "All hard pass, soft scores well above thresholds"
+contract: "research-assistant"
+input_state:
+  output.analysis_depth_score: 0.97
+  output.bias_disclosure_present: true
+  output.citation_format_score: 0.99
+  output.fabricated_citation_detected: false
+  output.plagiarism_detected: false
+  output.relevance_score: 0.98
+  output.source_diversity_score: 0.99
+  output.source_recency_score: 0.95
+  output.unsourced_claim_detected: false
+  output.unverified_data_detected: false
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: "compliant"

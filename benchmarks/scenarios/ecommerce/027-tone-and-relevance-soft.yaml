@@ -1,0 +1,24 @@
+id: "ecommerce-027-tone-and-relevance-soft"
+domain: "ecommerce"
+description: "Two soft violations - brand tone and relevance both low"
+contract: "ecommerce-product-recommendation"
+input_state:
+  output.competitor_reference_detected: false
+  output.unverified_availability_claim: false
+  output.unauthorized_discount_offered: false
+  output.pii_detected: false
+  output.sponsored_items_disclosed: true
+  output.undisclosed_dynamic_pricing: false
+  tools.all_calls_authorized: true
+  output.brand_tone_score: 0.50
+  output.recommendation_relevance_score: 0.40
+  output.completeness_score: 0.75
+  output.upsell_count: 1
+  response.latency_ms: 1500
+  output.customer_satisfaction_score: 0.65
+  session.total_tokens: 15000
+  session.total_cost_usd: 0.85
+expected:
+  hard_violations: 0
+  soft_violations: 2
+  verdict: "soft_violation"

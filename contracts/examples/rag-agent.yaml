@@ -1,0 +1,264 @@
+contractspec: "0.1"
+kind: agent
+name: rag-agent
+description: >
+  Behavioral contract for a Retrieval-Augmented Generation (RAG) agent that
+  retrieves relevant document chunks, synthesizes answers grounded in context,
+  and provides cited responses. Enforces hallucination prevention, source
+  citation, relevance thresholds, PII filtering, query alignment, and data
+  freshness. Ensures retrieval and generation quality across precision,
+  completeness, coherence, and confidence calibration.
+version: "1.0.0"
+
+metadata:
+  author: "RAG Engineering Team"
+  domain: rag
+  created: "2026-04-07"
+  tags:
+    - rag
+    - retrieval-augmented-generation
+    - grounded-generation
+    - hallucination-prevention
+    - vector-search
+
+preconditions:
+  - name: vector-store-connected
+    description: >
+      The vector store containing document embeddings must be connected
+      and responsive for retrieval queries.
+    check:
+      field: system.vector_store_status
+      equals: "available"
+
+  - name: embedding-model-loaded
+    description: >
+      The embedding model used for query and document encoding must be
+      loaded and operational.
+    check:
+      field: system.embedding_model_loaded
+      equals: true
+
+  - name: index-freshness-verified
+    description: >
+      The document index must be verified as current within the
+      configured staleness threshold.
+    check:
+      field: system.index_freshness_verified
+      equals: true
+
+invariants:
+  hard:
+    - name: no-hallucination-beyond-context
+      description: >
+        The agent must not generate claims that are not supported by
+        the retrieved context. Every statement must be traceable to
+        a retrieved chunk or explicitly marked as inference. Multi-hop
+        reasoning chains must maintain grounding at each step to
+        prevent compounding hallucination across reasoning hops.
+      category: output_constraints
+      check:
+        field: output.hallucination_detected
+        equals: false
+
+    - name: source-citation-required
+      description: >
+        Every answer must cite the specific document chunks used to
+        generate it. Uncited answers are prohibited.
+      category: output_constraints
+      check:
+        field: output.uncited_answer_detected
+        equals: false
+
+    - name: chunk-relevance-threshold
+      description: >
+        Retrieved chunks included in context must meet the minimum
+        relevance score. Irrelevant chunks must be filtered out
+        before generation. Embedding drift over time can silently
+        degrade relevance scores, requiring periodic re-indexing
+        and threshold recalibration.
+      category: output_constraints
+      check:
+        field: output.irrelevant_chunk_included
+        equals: false
+
+    - name: no-pii-in-retrieved-context
+      description: >
+        Retrieved chunks must be scanned for PII before inclusion
+        in the generation context. Any detected PII must be redacted.
+      category: confidentiality
+      check:
+        field: output.pii_in_context_detected
+        equals: false
+
+    - name: query-answer-alignment
+      description: >
+        The generated answer must directly address the user's query.
+        Tangential or off-topic responses violate this constraint.
+        For multi-hop queries, each reasoning step must remain aligned
+        with the original question intent.
+      category: output_constraints
+      check:
+        field: output.query_answer_misaligned
+        equals: false
+
+    - name: no-stale-data-serving
+      description: >
+        The agent must not serve answers from document chunks that
+        have been marked as expired, superseded, or retracted.
+        Embedding drift can cause stale documents to appear relevant
+        despite being outdated, requiring freshness metadata checks
+        independent of similarity scores.
+      category: data_integrity
+      check:
+        field: output.stale_data_served
+        equals: false
+
+  soft:
+    - name: retrieval-precision
+      description: >
+        The precision of retrieved chunks should be high — most
+        retrieved chunks should be relevant to the query. Low
+        precision wastes context window tokens on irrelevant
+        content and degrades generation quality.
+      category: output_quality
+      check:
+        field: output.retrieval_precision_score
+        gte: 0.7
+      recovery: refine-retrieval-query
+      recovery_window: 2
+
+    - name: answer-completeness
+      description: >
+        The answer should address all aspects of the user's query,
+        not just the most easily answerable parts. Multi-hop queries
+        require synthesizing information across multiple chunks to
+        provide complete answers.
+      category: output_quality
+      check:
+        field: output.answer_completeness_score
+        gte: 0.65
+      recovery: retrieve-additional-chunks
+      recovery_window: 2
+
+    - name: source-diversity
+      description: >
+        Answers should draw from multiple document sources when
+        available, avoiding single-source dependency.
+      category: output_quality
+      check:
+        field: output.source_diversity_score
+        gte: 0.5
+      recovery: broaden-retrieval-scope
+      recovery_window: 2
+
+    - name: response-coherence
+      description: >
+        The synthesized answer should be coherent and well-structured,
+        not a disjointed concatenation of chunk contents.
+      category: output_quality
+      check:
+        field: output.coherence_score
+        gte: 0.7
+      recovery: restructure-response
+      recovery_window: 1
+
+    - name: confidence-calibration
+      description: >
+        The agent's stated confidence should correlate with actual
+        answer correctness. Overconfident wrong answers are worse
+        than uncertain correct ones.
+      category: output_quality
+      check:
+        field: output.confidence_calibration_score
+        gte: 0.6
+      recovery: recalibrate-confidence
+      recovery_window: 2
+
+recovery:
+  strategies:
+    - name: refine-retrieval-query
+      type: inject_correction
+      actions:
+        - "Rewrite query with additional keywords from context"
+        - "Apply hybrid search (semantic + keyword) for better precision"
+      max_attempts: 2
+      fallback: reduce-retrieval-depth
+
+    - name: retrieve-additional-chunks
+      type: inject_correction
+      actions:
+        - "Increase top-k retrieval count"
+        - "Query with alternative phrasings of the original question"
+      max_attempts: 2
+
+    - name: broaden-retrieval-scope
+      type: inject_correction
+      actions:
+        - "Search across additional document collections"
+        - "Relax similarity threshold to include diverse sources"
+      max_attempts: 2
+
+    - name: restructure-response
+      type: inject_correction
+      actions:
+        - "Re-synthesize answer with logical flow and transitions"
+        - "Group related information from different chunks"
+      max_attempts: 1
+
+    - name: recalibrate-confidence
+      type: inject_correction
+      actions:
+        - "Re-score confidence based on source agreement and coverage"
+        - "Add uncertainty markers where evidence is thin"
+      max_attempts: 1
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize conversation and retrieval history to reduce tokens"
+      max_attempts: 3
+
+    - name: reduce-retrieval-depth
+      type: reduce_autonomy
+      actions:
+        - "Reduce top-k to minimum viable set"
+        - "Use cached results where available"
+      max_attempts: 1
+      fallback: escalate-to-operator
+
+    - name: escalate-to-operator
+      type: pause_and_escalate
+      actions:
+        - "Flag query as requiring human review"
+        - "Include retrieval diagnostics in escalation"
+      max_attempts: 1
+      fallback: graceful-end
+
+    - name: graceful-end
+      type: graceful_shutdown
+      actions:
+        - "Return best-effort answer with low-confidence warning"
+        - "Suggest user rephrase query or consult primary sources"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.95
+  delta: 0.1
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.90

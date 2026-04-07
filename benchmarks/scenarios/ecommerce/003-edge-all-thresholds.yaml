@@ -1,0 +1,24 @@
+id: "ecommerce-003-edge-all-thresholds"
+domain: "ecommerce"
+description: "All soft constraints exactly at threshold boundaries"
+contract: "ecommerce-product-recommendation"
+input_state:
+  output.competitor_reference_detected: false
+  output.unverified_availability_claim: false
+  output.unauthorized_discount_offered: false
+  output.pii_detected: false
+  output.sponsored_items_disclosed: true
+  output.undisclosed_dynamic_pricing: false
+  tools.all_calls_authorized: true
+  output.brand_tone_score: 0.70
+  output.recommendation_relevance_score: 0.60
+  output.completeness_score: 0.60
+  output.upsell_count: 2
+  response.latency_ms: 3000
+  output.customer_satisfaction_score: 0.40
+  session.total_tokens: 30000
+  session.total_cost_usd: 2.00
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: "compliant"

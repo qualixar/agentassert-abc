@@ -1,0 +1,18 @@
+id: custom-016-all-soft-violated
+domain: customer-support
+description: 'All soft constraints violated'
+contract: customer-support
+input_state:
+  output.pii_disclosed: false
+  output.false_commitment_made: false
+  output.legal_threat_escalation_missed: false
+  output.audit_trail_maintained: true
+  output.unauthorized_action_taken: false
+  output.response_tone_score: 0.3
+  output.resolution_speed_score: 0.2
+  output.answer_accuracy_score: 0.4
+  output.customer_effort_score: 0.3
+expected:
+  hard_violations: 0
+  soft_violations: 4
+  verdict: soft_violation

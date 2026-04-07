@@ -1,0 +1,20 @@
+id: mcp-to-007-007-no-side-effect-on-read
+domain: mcp-tools
+description: 'Single hard: no-side-effect-on-read'
+contract: mcp-tool-server
+input_state:
+  output.schema_violation_detected: false
+  output.unauthorized_resource_access: false
+  output.unvalidated_input_processed: false
+  output.rate_limit_bypassed: false
+  output.read_tool_side_effect_detected: true
+  tools.all_calls_authorized: true
+  response.latency_ms: 2500
+  output.description_accuracy_score: 0.9
+  output.error_helpfulness_score: 0.8
+  output.resource_leak_detected: false
+  session.total_tokens: 12500
+expected:
+  hard_violations: 1
+  soft_violations: 0
+  verdict: hard_breach

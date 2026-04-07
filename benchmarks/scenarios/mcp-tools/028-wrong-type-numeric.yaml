@@ -1,0 +1,18 @@
+id: mcp-to-028-wrong-type-numeric
+domain: mcp-tools
+description: 'Wrong type: error_helpfulness_score is a string instead of number'
+contract: mcp-tool-server
+input_state:
+  output.schema_violation_detected: false
+  output.unauthorized_resource_access: false
+  output.unvalidated_input_processed: false
+  output.rate_limit_bypassed: false
+  output.read_tool_side_effect_detected: false
+  response.latency_ms: 2500
+  output.description_accuracy_score: 0.9
+  output.error_helpfulness_score: "not_a_number"
+  output.resource_leak_detected: false
+expected:
+  hard_violations: 0
+  soft_violations: 1
+  verdict: soft_violation

@@ -1,0 +1,19 @@
+id: "research-013-hard-plus-soft"
+domain: "research"
+description: "Unverified data with low citation formatting"
+contract: "research-assistant"
+input_state:
+  output.analysis_depth_score: 0.8
+  output.bias_disclosure_present: true
+  output.citation_format_score: 0.5
+  output.fabricated_citation_detected: false
+  output.plagiarism_detected: false
+  output.relevance_score: 0.85
+  output.source_diversity_score: 0.8
+  output.source_recency_score: 0.7
+  output.unsourced_claim_detected: false
+  output.unverified_data_detected: true
+expected:
+  hard_violations: 1
+  soft_violations: 1
+  verdict: "hard_breach"

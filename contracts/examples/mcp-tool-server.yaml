@@ -1,0 +1,233 @@
+contractspec: "0.1"
+kind: agent
+name: mcp-tool-server
+description: >
+  Behavioral contract for a Model Context Protocol (MCP) tool server that exposes
+  tools, resources, and prompts to AI agents over JSON-RPC. Enforces schema
+  compliance, authorization boundaries, input validation, rate limiting, and
+  read-operation safety. Ensures operational quality for latency, error messages,
+  tool descriptions, and resource cleanup.
+version: "1.0.0"
+
+metadata:
+  author: "MCP Infrastructure Team"
+  domain: mcp
+  created: "2026-04-07"
+  tags:
+    - mcp
+    - model-context-protocol
+    - tool-server
+    - agent-infrastructure
+    - json-rpc
+
+preconditions:
+  - name: server-transport-initialized
+    description: >
+      The MCP server transport (stdio, SSE, or streamable HTTP) must be
+      initialized and accepting connections.
+    check:
+      field: system.transport_initialized
+      equals: true
+
+  - name: tool-registry-loaded
+    description: >
+      The tool registry with schemas, descriptions, and authorization
+      policies must be loaded and validated.
+    check:
+      field: system.tool_registry_loaded
+      equals: true
+
+  - name: auth-context-established
+    description: >
+      The client authentication context must be established before
+      any tool invocation is processed.
+    check:
+      field: session.auth_context_established
+      equals: true
+
+invariants:
+  hard:
+    - name: tool-schema-compliance
+      description: >
+        Every tool response must conform to its declared JSON Schema.
+        Schema violations indicate a broken contract between server
+        and client. Version compatibility must be maintained across
+        schema updates to prevent breaking changes for connected agents.
+      category: output_constraints
+      check:
+        field: output.schema_violation_detected
+        equals: false
+
+    - name: no-unauthorized-resource-access
+      description: >
+        The server must not access files, databases, or network
+        resources beyond what the tool's declared capabilities allow.
+        Auth tokens and credentials used for resource access must
+        support rotation without service interruption to maintain
+        security hygiene.
+      category: security
+      check:
+        field: output.unauthorized_resource_access
+        equals: false
+
+    - name: input-validation-required
+      description: >
+        All tool inputs must be validated against the declared input
+        schema before execution. Invalid inputs must be rejected with
+        a clear error, never silently processed. Validation must be
+        version-aware to handle schema evolution across MCP protocol
+        versions gracefully.
+      category: security
+      check:
+        field: output.unvalidated_input_processed
+        equals: false
+
+    - name: rate-limit-enforcement
+      description: >
+        Per-client and per-tool rate limits must be enforced. Exceeding
+        limits must return appropriate error codes, not queue silently.
+        Rate limits protect against both accidental loops and malicious
+        abuse from compromised agent sessions.
+      category: operational_safety
+      check:
+        field: output.rate_limit_bypassed
+        equals: false
+
+    - name: no-side-effect-on-read
+      description: >
+        Tools declared as read-only must never produce side effects
+        (writes, mutations, external API calls with side effects).
+        Read-safety is a fundamental trust assumption that agents
+        rely on for safe tool exploration and retry logic.
+      category: operational_safety
+      check:
+        field: output.read_tool_side_effect_detected
+        equals: false
+
+  soft:
+    - name: response-latency
+      description: >
+        Tool invocations should complete within acceptable latency
+        bounds for interactive agent workflows.
+      category: timeout_compliance
+      check:
+        field: response.latency_ms
+        lte: 5000
+      recovery: timeout-and-retry
+      recovery_window: 2
+
+    - name: tool-description-accuracy
+      description: >
+        Tool descriptions should accurately reflect what the tool does,
+        enabling correct tool selection by AI agents.
+      category: output_quality
+      check:
+        field: output.description_accuracy_score
+        gte: 0.8
+      recovery: update-tool-descriptions
+      recovery_window: 3
+
+    - name: error-message-helpfulness
+      description: >
+        Error responses should include actionable information that helps
+        the client (or agent) correct the request.
+      category: output_quality
+      check:
+        field: output.error_helpfulness_score
+        gte: 0.7
+      recovery: enrich-error-messages
+      recovery_window: 2
+
+    - name: resource-cleanup
+      description: >
+        Temporary resources (files, connections, handles) created during
+        tool execution should be cleaned up after completion.
+      category: operational_safety
+      check:
+        field: output.resource_leak_detected
+        equals: false
+      recovery: force-cleanup
+      recovery_window: 1
+
+recovery:
+  strategies:
+    - name: timeout-and-retry
+      type: inject_correction
+      actions:
+        - "Cancel timed-out tool execution"
+        - "Retry with reduced input scope or pagination"
+      max_attempts: 2
+      fallback: degrade-gracefully
+
+    - name: update-tool-descriptions
+      type: inject_correction
+      actions:
+        - "Flag inaccurate tool descriptions for review"
+        - "Append clarifying notes to tool metadata"
+      max_attempts: 1
+
+    - name: enrich-error-messages
+      type: inject_correction
+      actions:
+        - "Add input validation details to error response"
+        - "Include expected schema in error payload"
+      max_attempts: 1
+
+    - name: force-cleanup
+      type: inject_correction
+      actions:
+        - "Force-close open file handles and connections"
+        - "Delete temporary files created during execution"
+      max_attempts: 1
+
+    - name: summarize-and-compress
+      type: inject_correction
+      actions:
+        - "Summarize tool invocation history to reduce token overhead"
+      max_attempts: 3
+
+    - name: degrade-gracefully
+      type: reduce_autonomy
+      actions:
+        - "Disable slow tools and serve cached results where available"
+        - "Return partial results with degradation notice"
+      max_attempts: 1
+      fallback: escalate-to-operator
+
+    - name: escalate-to-operator
+      type: pause_and_escalate
+      actions:
+        - "Alert server operator of persistent tool failures"
+        - "Include error logs and invocation context"
+      max_attempts: 1
+      fallback: graceful-end
+
+    - name: graceful-end
+      type: graceful_shutdown
+      actions:
+        - "Complete in-flight requests with timeout"
+        - "Return service-unavailable to new requests"
+        - "Flush logs and metrics"
+      max_attempts: 1
+
+satisfaction:
+  p: 0.95
+  delta: 0.1
+  k: 3
+
+drift:
+  weights:
+    compliance: 0.6
+    distributional: 0.4
+  window: 50
+  thresholds:
+    warning: 0.3
+    critical: 0.6
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    recovery: 0.20
+    stress: 0.20
+  deployment_threshold: 0.90

@@ -1,0 +1,107 @@
+[project]
+name = "agentassert-abc"
+version = "0.1.0"
+description = "Formal behavioral specification and runtime enforcement for autonomous AI agents. Agent Behavioral Contracts (ABC)."
+readme = "README.md"
+license = "Elastic-2.0"
+requires-python = ">=3.12"
+authors = [
+    { name = "Varun Pratap Bhardwaj" },
+]
+keywords = [
+    "ai-agents",
+    "behavioral-contracts",
+    "runtime-enforcement",
+    "drift-detection",
+    "agent-safety",
+    "llm-guardrails",
+    "formal-specification",
+    "design-by-contract",
+    "qualixar",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.10,<3",
+]
+
+[project.urls]
+Homepage = "https://agentassert.com"
+Documentation = "https://agentassert.com/docs"
+Repository = "https://github.com/qualixar/agentassert-abc"
+Paper = "https://arxiv.org/abs/2602.22302"
+Issues = "https://github.com/qualixar/agentassert-abc/issues"
+
+[project.optional-dependencies]
+yaml = [
+    "ruamel-yaml>=0.18",
+]
+math = [
+    "scipy>=1.14",
+    "numpy>=2.0",
+]
+llm = ["litellm>=1.50"]
+otel = ["opentelemetry-api>=1.28"]
+all = [
+    "agentassert-abc[yaml,math,llm,otel]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentassert_abc"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".backup/",
+    "claim/",
+    "benchmarks/live_benchmark.py",
+    "benchmarks/live_results.json",
+    "*.ots",
+    ".venv/",
+    "venv/",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+    "pytest-asyncio>=0.24",
+    "hypothesis>=6.100",
+    "ruff>=0.9",
+    "basedpyright>=1.20",
+    "openai>=2.30.0",
+    "anthropic>=0.89.0",
+]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
+
+[tool.basedpyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"

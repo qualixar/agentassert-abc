@@ -1,0 +1,20 @@
+id: code-g-023-wrong-type-numeric
+domain: code-generation
+description: 'Wrong type: performance_score is a string instead of number'
+contract: code-generation
+input_state:
+  output.secrets_detected: false
+  output.malicious_pattern_detected: false
+  output.license_violation_detected: false
+  output.arbitrary_execution_detected: false
+  output.unsanitized_input_detected: false
+  output.hardcoded_credentials_detected: false
+  output.code_quality_score: 0.8
+  output.test_suggestion_score: 0.7
+  output.documentation_score: 0.7
+  output.performance_score: "not_a_number"
+  output.security_practices_score: 0.8
+expected:
+  hard_violations: 0
+  soft_violations: 1
+  verdict: soft_violation

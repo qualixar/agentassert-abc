@@ -1,0 +1,17 @@
+id: custom-022-missing-soft-field
+domain: customer-support
+description: 'Missing soft field: answer_accuracy_score not provided'
+contract: customer-support
+input_state:
+  output.pii_disclosed: false
+  output.false_commitment_made: false
+  output.legal_threat_escalation_missed: false
+  output.audit_trail_maintained: true
+  output.unauthorized_action_taken: false
+  output.response_tone_score: 0.85
+  output.resolution_speed_score: 0.8
+  output.customer_effort_score: 0.8
+expected:
+  hard_violations: 0
+  soft_violations: 1
+  verdict: soft_violation

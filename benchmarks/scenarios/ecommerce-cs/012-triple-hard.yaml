@@ -1,0 +1,21 @@
+id: "ecom-cs-012-triple-hard"
+domain: "ecommerce-cs"
+description: "False promise, missed escalation, no audit trail"
+contract: "ecommerce-customer-service"
+input_state:
+  output.audit_trail_maintained: false
+  output.competitor_referral_made: false
+  output.customer_satisfaction_score: 0.8
+  output.empathy_tone_score: 0.85
+  output.false_promise_made: true
+  output.first_response_speed_score: 0.9
+  output.handoff_smoothness_score: 0.9
+  output.knowledge_base_accuracy_score: 0.95
+  output.pii_disclosed: false
+  output.resolution_completeness_score: 0.88
+  output.threat_escalation_missed: true
+  output.unauthorized_account_change: false
+expected:
+  hard_violations: 3
+  soft_violations: 0
+  verdict: "hard_breach"

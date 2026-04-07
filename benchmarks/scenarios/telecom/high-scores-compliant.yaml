@@ -1,0 +1,22 @@
+id: "telecom-002-high-scores-compliant"
+domain: "telecom"
+description: "All hard pass, soft scores well above thresholds"
+contract: "telecom-customer-support"
+input_state:
+  output.billing_inaccuracy_detected: false
+  output.callback_scheduling_score: 0.97
+  output.contract_terms_inaccurate: false
+  output.loyalty_offer_appropriateness_score: 0.95
+  output.network_transparency_score: 0.99
+  output.outage_misrepresented: false
+  output.pii_exposed: false
+  output.plan_recommendation_relevance_score: 0.98
+  output.resolution_speed_score: 0.97
+  output.satisfaction_followup_score: 0.96
+  output.troubleshooting_accuracy_score: 0.99
+  output.unauthorized_data_access: false
+  output.unauthorized_plan_change: false
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: "compliant"

@@ -1,0 +1,19 @@
+id: "research-015-all-soft-just-below"
+domain: "research"
+description: "All soft scores just below thresholds"
+contract: "research-assistant"
+input_state:
+  output.analysis_depth_score: 0.64
+  output.bias_disclosure_present: true
+  output.citation_format_score: 0.79
+  output.fabricated_citation_detected: false
+  output.plagiarism_detected: false
+  output.relevance_score: 0.69
+  output.source_diversity_score: 0.59
+  output.source_recency_score: 0.49
+  output.unsourced_claim_detected: false
+  output.unverified_data_detected: false
+expected:
+  hard_violations: 0
+  soft_violations: 5
+  verdict: "soft_violation"

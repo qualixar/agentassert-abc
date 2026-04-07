@@ -1,0 +1,22 @@
+id: "telecom-011-plan-and-billing"
+domain: "telecom"
+description: "Unauthorized plan change with billing inaccuracy"
+contract: "telecom-customer-support"
+input_state:
+  output.billing_inaccuracy_detected: true
+  output.callback_scheduling_score: 0.85
+  output.contract_terms_inaccurate: false
+  output.loyalty_offer_appropriateness_score: 0.8
+  output.network_transparency_score: 0.9
+  output.outage_misrepresented: false
+  output.pii_exposed: false
+  output.plan_recommendation_relevance_score: 0.9
+  output.resolution_speed_score: 0.85
+  output.satisfaction_followup_score: 0.8
+  output.troubleshooting_accuracy_score: 0.9
+  output.unauthorized_data_access: false
+  output.unauthorized_plan_change: true
+expected:
+  hard_violations: 2
+  soft_violations: 0
+  verdict: "hard_breach"

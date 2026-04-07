@@ -1,0 +1,20 @@
+id: mcp-to-020-020-mixed-1
+domain: mcp-tools
+description: 'Mixed: tool-schema-compliance+response-latency'
+contract: mcp-tool-server
+input_state:
+  output.schema_violation_detected: true
+  output.unauthorized_resource_access: false
+  output.unvalidated_input_processed: false
+  output.rate_limit_bypassed: false
+  output.read_tool_side_effect_detected: false
+  tools.all_calls_authorized: true
+  response.latency_ms: 7500
+  output.description_accuracy_score: 0.9
+  output.error_helpfulness_score: 0.8
+  output.resource_leak_detected: false
+  session.total_tokens: 12500
+expected:
+  hard_violations: 1
+  soft_violations: 1
+  verdict: hard_breach

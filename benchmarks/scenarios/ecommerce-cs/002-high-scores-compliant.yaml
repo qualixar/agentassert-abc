@@ -1,0 +1,21 @@
+id: "ecom-cs-002-high-scores-compliant"
+domain: "ecommerce-cs"
+description: "All hard pass, soft scores well above thresholds"
+contract: "ecommerce-customer-service"
+input_state:
+  output.audit_trail_maintained: true
+  output.competitor_referral_made: false
+  output.customer_satisfaction_score: 0.96
+  output.empathy_tone_score: 0.99
+  output.false_promise_made: false
+  output.first_response_speed_score: 0.98
+  output.handoff_smoothness_score: 0.98
+  output.knowledge_base_accuracy_score: 0.99
+  output.pii_disclosed: false
+  output.resolution_completeness_score: 0.97
+  output.threat_escalation_missed: false
+  output.unauthorized_account_change: false
+expected:
+  hard_violations: 0
+  soft_violations: 0
+  verdict: "compliant"

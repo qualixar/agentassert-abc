@@ -1,0 +1,22 @@
+id: "retail-014-double-hard-double-soft"
+domain: "retail"
+description: "Two hard breaches with two soft violations"
+contract: "retail-shopping-assistant"
+input_state:
+  output.age_verification_skipped: false
+  output.availability_notification_score: 0.85
+  output.budget_adherence_score: 0.9
+  output.counterfeit_promoted: true
+  output.cross_sell_relevance_score: 0.4
+  output.discriminatory_recommendation_detected: true
+  output.inventory_misrepresented: false
+  output.personalization_relevance_score: 0.85
+  output.price_mismatch_detected: false
+  output.return_policy_violated: false
+  output.seasonal_appropriateness_score: 0.3
+  output.size_accuracy_score: 0.9
+  output.style_consistency_score: 0.8
+expected:
+  hard_violations: 2
+  soft_violations: 2
+  verdict: "hard_breach"

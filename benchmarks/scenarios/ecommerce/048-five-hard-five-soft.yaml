@@ -1,0 +1,24 @@
+id: "ecommerce-048-five-hard-five-soft"
+domain: "ecommerce"
+description: "Severe mixed - five hard breaches and five soft violations"
+contract: "ecommerce-product-recommendation"
+input_state:
+  output.competitor_reference_detected: true
+  output.unverified_availability_claim: true
+  output.unauthorized_discount_offered: true
+  output.pii_detected: true
+  output.sponsored_items_disclosed: false
+  output.undisclosed_dynamic_pricing: false
+  tools.all_calls_authorized: true
+  output.brand_tone_score: 0.45
+  output.recommendation_relevance_score: 0.35
+  output.completeness_score: 0.40
+  output.upsell_count: 5
+  response.latency_ms: 6000
+  output.customer_satisfaction_score: 0.65
+  session.total_tokens: 15000
+  session.total_cost_usd: 0.85
+expected:
+  hard_violations: 5
+  soft_violations: 5
+  verdict: "hard_breach"

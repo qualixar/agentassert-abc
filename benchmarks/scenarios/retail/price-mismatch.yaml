@@ -1,0 +1,22 @@
+id: "retail-005-price-mismatch"
+domain: "retail"
+description: "Price mismatch detected in recommendation"
+contract: "retail-shopping-assistant"
+input_state:
+  output.age_verification_skipped: false
+  output.availability_notification_score: 0.85
+  output.budget_adherence_score: 0.9
+  output.counterfeit_promoted: false
+  output.cross_sell_relevance_score: 0.8
+  output.discriminatory_recommendation_detected: false
+  output.inventory_misrepresented: false
+  output.personalization_relevance_score: 0.85
+  output.price_mismatch_detected: true
+  output.return_policy_violated: false
+  output.seasonal_appropriateness_score: 0.8
+  output.size_accuracy_score: 0.9
+  output.style_consistency_score: 0.8
+expected:
+  hard_violations: 1
+  soft_violations: 0
+  verdict: "hard_breach"

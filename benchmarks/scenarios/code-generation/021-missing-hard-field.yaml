@@ -1,0 +1,19 @@
+id: code-g-021-missing-hard-field
+domain: code-generation
+description: 'Missing hard field: secrets_detected not provided'
+contract: code-generation
+input_state:
+  output.malicious_pattern_detected: false
+  output.license_violation_detected: false
+  output.arbitrary_execution_detected: false
+  output.unsanitized_input_detected: false
+  output.hardcoded_credentials_detected: false
+  output.code_quality_score: 0.8
+  output.test_suggestion_score: 0.7
+  output.documentation_score: 0.7
+  output.performance_score: 0.75
+  output.security_practices_score: 0.8
+expected:
+  hard_violations: 1
+  soft_violations: 0
+  verdict: hard_breach

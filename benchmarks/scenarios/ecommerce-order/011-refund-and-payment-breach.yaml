@@ -1,0 +1,21 @@
+id: "ecom-order-011-refund-and-payment-breach"
+domain: "ecommerce-order"
+description: "Unauthorized refund plus payment data exposed"
+contract: "ecommerce-order-management"
+input_state:
+  output.canceled_order_fulfilled: false
+  output.communication_tone_score: 0.85
+  output.confirmation_speed_score: 0.9
+  output.inventory_check_skipped: false
+  output.order_status_mismatch: false
+  output.payment_data_exposed: true
+  output.price_override_attempted: false
+  output.repeat_issue_escalation_rate: 0.95
+  output.shipping_estimate_accuracy: 0.9
+  output.tracking_completeness_score: 0.85
+  output.unauthorized_refund_issued: true
+  output.upsell_relevance_score: 0.8
+expected:
+  hard_violations: 2
+  soft_violations: 0
+  verdict: "hard_breach"
