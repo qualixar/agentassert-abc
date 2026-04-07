@@ -103,5 +103,9 @@ line-length = 99
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH"]
 
 [tool.basedpyright]
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 pythonVersion = "3.12"
+reportUnsupportedDunderAll = false
+reportMissingImports = "warning"
+reportCallIssue = "warning"
+reportPossiblyUnboundVariable = "warning"

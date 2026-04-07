@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 
 from agentassert_abc.dsl.models import ValidationError
-from agentassert_abc.models import ConstraintCheck, ContractSpec, SoftConstraint  # noqa: TCH001
+from agentassert_abc.models import ConstraintCheck, ContractSpec, GovernanceConstraint, SoftConstraint  # noqa: TCH001
 
 _OPERATOR_FIELDS = (
     "equals", "not_equals", "gt", "gte", "lt", "lte",
@@ -99,7 +99,7 @@ def _validate_recovery_refs(
     errors: list[ValidationError],
 ) -> None:
     """Every soft constraint recovery must reference an existing strategy."""
-    soft_constraints: list[tuple[str, SoftConstraint]] = []
+    soft_constraints: list[tuple[str, SoftConstraint | GovernanceConstraint]] = []
 
     if contract.invariants:
         for i, c in enumerate(contract.invariants.soft):
