@@ -1,0 +1,25 @@
+{
+  "name": "agentassert-abc",
+  "version": "0.1.0",
+  "description": "Formal behavioral specification and runtime enforcement for AI agents. Agent Behavioral Contracts (ABC).",
+  "main": "index.js",
+  "keywords": [
+    "ai",
+    "agents",
+    "behavioral-contracts",
+    "guardrails",
+    "drift-detection",
+    "agent-safety",
+    "reliability",
+    "llm",
+    "agentassert",
+    "qualixar"
+  ],
+  "author": "Varun Pratap Bhardwaj <varun@qualixar.com>",
+  "license": "Elastic-2.0",
+  "homepage": "https://agentassert.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qualixar/agentassert-abc"
+  }
+}

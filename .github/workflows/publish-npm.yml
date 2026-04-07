@@ -1,9 +1,8 @@
 name: Publish to npm
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
 
 jobs:
   publish:
@@ -18,7 +17,7 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Update package.json version from tag
+      - name: Update package.json version from release tag
         working-directory: claim/npm
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"

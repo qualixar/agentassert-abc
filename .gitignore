@@ -27,8 +27,8 @@ htmlcov/
 benchmarks/live_results.json
 benchmarks/live_benchmark.py
 
-# npm claim artifacts (not for public repo)
-claim/
+# npm claim artifacts — only claim/npm/ is tracked (used by publish-npm workflow)
+claim/pypi/
 
 # Internal dev files (never commit)
 .backup/
