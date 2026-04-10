@@ -16,7 +16,7 @@
     "qualixar"
   ],
   "author": "Varun Pratap Bhardwaj <varun@qualixar.com>",
-  "license": "Elastic-2.0",
+  "license": "AGPL-3.0-or-later",
   "homepage": "https://agentassert.com",
   "repository": {
     "type": "git",

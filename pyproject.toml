@@ -3,7 +3,7 @@ name = "agentassert-abc"
 version = "0.1.0"
 description = "Formal behavioral specification and runtime enforcement for autonomous AI agents. Agent Behavioral Contracts (ABC)."
 readme = "README.md"
-license = "Elastic-2.0"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"
 authors = [
     { name = "Varun Pratap Bhardwaj" },

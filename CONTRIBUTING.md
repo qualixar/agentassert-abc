@@ -65,7 +65,7 @@ All source files include a copyright header:
 
 ```python
 # Copyright 2026 Varun Pratap Bhardwaj & Qualixar
-# Licensed under Elastic License 2.0 — see LICENSE
+# Licensed under AGPL-3.0-or-later — see LICENSE
 # AgentAssert: Formal Behavioral Contracts for AI Agents
 # Paper: arXiv:2602.22302 | https://agentassert.com
 ```
@@ -74,7 +74,7 @@ Add this header to any new `.py` files you create.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [Elastic License 2.0](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [AGPL-3.0](LICENSE).
 
 ---
 

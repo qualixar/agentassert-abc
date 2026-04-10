@@ -8,7 +8,7 @@
   <a href="https://pypi.org/project/agentassert-abc/"><img src="https://img.shields.io/pypi/pyversions/agentassert-abc?style=flat-square" alt="Python"></a>
   <a href="https://arxiv.org/abs/2602.22302"><img src="https://img.shields.io/badge/arXiv-2602.22302-b31b1b?style=flat-square" alt="arXiv"></a>
   <a href="https://github.com/qualixar/agentassert-abc/actions"><img src="https://img.shields.io/github/actions/workflow/status/qualixar/agentassert-abc/ci.yml?style=flat-square&label=tests" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Elastic--2.0-green?style=flat-square" alt="License"></a>
+  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=flat-square" alt="AGPL v3"></a>
 </p>
 
 ---
@@ -34,7 +34,7 @@ It is the only framework combining all **6 pillars** of rigorous agent governanc
 pip install agentassert-abc[yaml,math]
 ```
 
-Requires **Python 3.12+**. Licensed under [Elastic License 2.0](LICENSE).
+Requires **Python 3.12+**. Licensed under [AGPL-3.0](LICENSE).
 
 Optional extras:
 
@@ -376,7 +376,11 @@ Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instruct
 
 ## License
 
-Elastic License 2.0. See [LICENSE](LICENSE) for details.
+GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE).
+
+For commercial licensing (closed-source, proprietary, or hosted use), see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) or contact varun.pratap.bhardwaj@gmail.com.
+
+Copyright (c) 2026 Varun Pratap Bhardwaj / Qualixar.
 
 ---
 

@@ -28,7 +28,7 @@ AgentAssert implements Agent Behavioral Contracts (ABC) — the only framework c
 
 ## License
 
-Elastic License 2.0
+AGPL-3.0
 
 ---
 
