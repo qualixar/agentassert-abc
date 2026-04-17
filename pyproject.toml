@@ -1,6 +1,6 @@
 [project]
 name = "agentassert-abc"
-version = "0.2.2"
+version = "0.2.3"
 description = "Formal behavioral specification and runtime enforcement for autonomous AI agents. Agent Behavioral Contracts (ABC)."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -73,6 +73,15 @@ exclude = [
     "*.ots",
     ".venv/",
     "venv/",
+    ".claude/",
+    "CLAUDE.md",
+    "AGENTS.md",
+    ".npmignore",
+    ".code-review-graph/",
+    ".gitnexus/",
+    ".env*",
+    "*.log",
+    ".github/workflows/*.bak",
 ]
 
 [dependency-groups]
