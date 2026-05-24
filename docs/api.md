@@ -1,7 +1,6 @@
 # API Reference
 
-!!! note "Full API reference coming soon"
-    Auto-generated API documentation with complete type signatures and docstrings will be available in a future release. In the meantime, the source code is fully type-annotated and documented with docstrings. See [src/agentassert_abc/](https://github.com/qualixar/agentassert-abc/tree/main/src/agentassert_abc) for the implementation.
+---
 
 ---
 

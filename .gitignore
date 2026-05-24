@@ -38,7 +38,6 @@ claim/pypi/
 .gitnexus/
 graphify-out/
 *.bak
-CHANGELOG.md
 
 # Blockchain timestamp proofs (keep in .backup only)
 *.ots
