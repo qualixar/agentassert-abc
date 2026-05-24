@@ -22,7 +22,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable  # noqa: TC003
 
 # ---------------------------------------------------------------------------
 # Event types
@@ -206,7 +206,7 @@ class EventBus:
         with self._lock:
             callbacks = list(self._subscribers.get(EventKind(event.kind), []))
         for cb in callbacks:
-            try:
+            try:  # noqa: SIM105
                 cb(event)
             except Exception:
                 pass  # swallow — one subscriber crash must not break others

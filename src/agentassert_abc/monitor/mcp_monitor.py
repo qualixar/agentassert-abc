@@ -3,9 +3,10 @@
 # AgentAssert: Formal Behavioral Contracts for AI Agents
 # Paper: arXiv:2602.22302 | https://agentassert.com
 
+# ruff: noqa: TC001
 """MCP Server Monitor — behavioral contract enforcement for MCP tool servers.
 
-Monitors MCP tool calls against a ContractSpec, evaluating both the tool
+Monitors MCP tool calls against a ContractSpec,  # noqa: TC001 evaluating both the tool
 invocation request (preconditions, governance) and the tool result (invariants).
 Integrates with EventBus for violation/recovery/drift events.
 
@@ -21,7 +22,7 @@ from typing import Any
 from agentassert_abc.evaluator.engine import evaluate_check
 from agentassert_abc.exceptions import ContractBreachError
 from agentassert_abc.models import (
-    ContractSpec,
+    ContractSpec,  # noqa: TC001
 )
 from agentassert_abc.monitor.events import EventBus, MonitorEvent
 from agentassert_abc.monitor.session import SessionMonitor
@@ -74,7 +75,7 @@ class MCPServerMonitor:
 
     def __init__(
         self,
-        contract: ContractSpec,
+        contract: ContractSpec,  # noqa: TC001
         event_bus: EventBus | None = None,
         raise_on_hard: bool = True,
     ) -> None:

@@ -38,7 +38,7 @@ class TestEventDataclasses:
 
     def test_events_are_frozen(self) -> None:
         ev = ViolationEvent(constraint_name="test")
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             ev.constraint_name = "changed"  # type: ignore[misc]  # noqa: B017
 
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentassert_abc.integrations.base import AgentAdapter
-from agentassert_abc.models import ContractSpec
+from agentassert_abc.models import ContractSpec  # noqa: TC001
 from agentassert_abc.monitor.session import SessionMonitor
 
 
