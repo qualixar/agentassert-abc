@@ -34,6 +34,7 @@ from agentassert_abc.exceptions import (
     ContractParseError,
     ContractValidationError,
     DriftThresholdError,
+    ExprEvaluationError,
     PreconditionFailedError,
     RecoveryFailedError,
     StateExtractionError,
@@ -91,8 +92,60 @@ def __getattr__(name: str):  # type: ignore[no-untyped-def]  # noqa: N807
         # Certification (F-07: export certification)
         "SPRTCertifier": ("agentassert_abc.certification.sprt", "SPRTCertifier"),
         "compose_guarantees": ("agentassert_abc.certification.composition", "compose_guarantees"),
+        "compose_guarantees_with_conditions": (
+            "agentassert_abc.certification.composition",
+            "compose_guarantees_with_conditions",
+        ),
+        "ConditionVerdict": ("agentassert_abc.certification.composition", "ConditionVerdict"),
+        "ConditionResult": ("agentassert_abc.certification.composition", "ConditionResult"),
+        "CompositionResult": ("agentassert_abc.certification.composition", "CompositionResult"),
+        "SatisfactionChecker": (
+            "agentassert_abc.certification.satisfaction", "SatisfactionChecker",
+        ),
+        "SatisfactionVerdict": (
+            "agentassert_abc.certification.satisfaction", "SatisfactionVerdict",
+        ),
+        "SessionLog": ("agentassert_abc.certification.satisfaction", "SessionLog"),
+        "TurnRecord": ("agentassert_abc.certification.satisfaction", "TurnRecord"),
+        # Metrics (F3/F4: OU dynamics + Lyapunov)
+        "OUFitter": ("agentassert_abc.metrics.dynamics", "OUFitter"),
+        "LyapunovStabilityCheck": ("agentassert_abc.metrics.dynamics", "LyapunovStabilityCheck"),
+        "StabilityVerdict": ("agentassert_abc.metrics.dynamics", "StabilityVerdict"),
+        "StabilityReport": ("agentassert_abc.metrics.dynamics", "StabilityReport"),
+        "OUParameters": ("agentassert_abc.metrics.dynamics", "OUParameters"),
+        # Evaluator (G5: sandboxed expr)
+        "SafeExprEvaluator": ("agentassert_abc.evaluator.expr_eval", "SafeExprEvaluator"),
+        "ExprResult": ("agentassert_abc.evaluator.expr_eval", "ExprResult"),
         # Adapters (F-08: export adapters)
         "GenericAdapter": ("agentassert_abc.integrations.generic", "GenericAdapter"),
+        "LangGraphAdapter": ("agentassert_abc.integrations.langgraph", "LangGraphAdapter"),
+        "CrewAIAdapter": ("agentassert_abc.integrations.crewai", "CrewAIAdapter"),
+        "OpenAIAgentsAdapter": (
+            "agentassert_abc.integrations.openai_agents", "OpenAIAgentsAdapter",
+        ),
+        "PydanticAIAdapter": ("agentassert_abc.integrations.pydantic_ai", "PydanticAIAdapter"),
+        # Metrics (F0/F1: adaptive thresholds)
+        "AdaptiveThresholdEngine": ("agentassert_abc.metrics.adaptive", "AdaptiveThresholdEngine"),
+        "AdaptiveConfig": ("agentassert_abc.metrics.adaptive", "AdaptiveConfig"),
+        # Monitor (F9: EventBus + MCP)
+        "EventBus": ("agentassert_abc.monitor.events", "EventBus"),
+        "EventKind": ("agentassert_abc.monitor.events", "EventKind"),
+        "ViolationEvent": ("agentassert_abc.monitor.events", "ViolationEvent"),
+        "RecoveryEvent": ("agentassert_abc.monitor.events", "RecoveryEvent"),
+        "DriftWarningEvent": ("agentassert_abc.monitor.events", "DriftWarningEvent"),
+        "SessionSummaryEvent": ("agentassert_abc.monitor.events", "SessionSummaryEvent"),
+        "MCPServerMonitor": ("agentassert_abc.monitor.mcp_monitor", "MCPServerMonitor"),
+        "ToolCallVerdict": ("agentassert_abc.monitor.mcp_monitor", "ToolCallVerdict"),
+        # Exporters (Phase 6)
+        "OTelExporter": ("agentassert_abc.exporters.otel", "OTelExporter"),
+        "OTelSpan": ("agentassert_abc.exporters.otel", "OTelSpan"),
+        "EUAIActReportGenerator": (
+            "agentassert_abc.exporters.eu_ai_act", "EUAIActReportGenerator",
+        ),
+        "EUAIReport": ("agentassert_abc.exporters.eu_ai_act", "EUAIReport"),
+        # A2A (Phase 7)
+        "A2AComplianceBridge": ("agentassert_abc.integrations.a2a", "A2AComplianceBridge"),
+        "A2AComplianceResult": ("agentassert_abc.integrations.a2a", "A2AComplianceResult"),
     }
     if name in _lazy_map:
         import importlib
@@ -127,8 +180,49 @@ __all__ = [
     # Certification (F-07)
     "SPRTCertifier",
     "compose_guarantees",
+    "compose_guarantees_with_conditions",
+    "ConditionVerdict",
+    "ConditionResult",
+    "CompositionResult",
+    "SatisfactionChecker",
+    "SatisfactionVerdict",
+    "SessionLog",
+    "TurnRecord",
+    # Metrics (F3/F4)
+    "OUFitter",
+    "LyapunovStabilityCheck",
+    "StabilityVerdict",
+    "StabilityReport",
+    "OUParameters",
+    # Evaluator (G5)
+    "SafeExprEvaluator",
+    "ExprResult",
     # Adapters (F-08)
     "GenericAdapter",
+    "LangGraphAdapter",
+    "CrewAIAdapter",
+    "OpenAIAgentsAdapter",
+    "PydanticAIAdapter",
+    # Metrics (F0/F1: adaptive thresholds)
+    "AdaptiveThresholdEngine",
+    "AdaptiveConfig",
+    # Monitor (F9)
+    "EventBus",
+    "EventKind",
+    "ViolationEvent",
+    "RecoveryEvent",
+    "DriftWarningEvent",
+    "SessionSummaryEvent",
+    "MCPServerMonitor",
+    "ToolCallVerdict",
+    # Exporters (Phase 6)
+    "OTelExporter",
+    "OTelSpan",
+    "EUAIActReportGenerator",
+    "EUAIReport",
+    # A2A (Phase 7)
+    "A2AComplianceBridge",
+    "A2AComplianceResult",
     # Models
     "ConstraintCheck",
     "ContractMetadata",
@@ -153,6 +247,7 @@ __all__ = [
     "ContractParseError",
     "ContractValidationError",
     "DriftThresholdError",
+    "ExprEvaluationError",
     "PreconditionFailedError",
     "RecoveryFailedError",
     "StateExtractionError",

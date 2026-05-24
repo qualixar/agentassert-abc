@@ -37,6 +37,10 @@ class PreconditionFailedError(AgentAssertError):
     """Precondition not met — agent should not process request."""
 
 
+class ExprEvaluationError(AgentAssertError):
+    """Raised when expr operator evaluation fails for a reason other than a normal False result."""
+
+
 class StateExtractionError(AgentAssertError, TypeError):
     """F-19: Output type not supported by adapter's extract_state().
 
