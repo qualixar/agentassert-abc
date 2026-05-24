@@ -42,7 +42,13 @@ class SessionMonitor:
         summary = monitor.session_summary()
     """
 
-    def __init__(self, contract: ContractSpec) -> None:
+    def __init__(
+        self,
+        contract: ContractSpec,
+        raise_on_drift: bool = False,
+        drift_threshold: float = 0.5,
+        max_recovery_attempts: int = 3,
+    ) -> None:
         self._contract = contract
         self._compliance = ComplianceTracker()
         self._drift = DriftTracker(
@@ -53,6 +59,9 @@ class SessionMonitor:
         self._total_events = 0
         self._recovery_attempts = 0
         self._recovery_successes = 0
+        self._raise_on_drift = raise_on_drift
+        self._drift_threshold = drift_threshold
+        self._max_recovery_attempts = max_recovery_attempts
         self._lock = threading.Lock()  # SEC-05: Thread safety
 
     def step(
@@ -100,6 +109,13 @@ class SessionMonitor:
         drift_score = self._drift.compute_drift(
             c_total=c_total, action_dist=action_dist
         )
+
+        # G7: Raise DriftThresholdError if enabled and threshold exceeded
+        if self._raise_on_drift and drift_score >= self._drift_threshold:
+            from agentassert_abc.exceptions import DriftThresholdError
+            raise DriftThresholdError(
+                f"Drift {drift_score:.3f} exceeds threshold {self._drift_threshold}"
+            )
 
         # Track violations (M-21: separate hard vs soft names)
         hard_v = len(eval_result.hard_violations)
@@ -154,12 +170,27 @@ class SessionMonitor:
         Args:
             attempted: Whether recovery was attempted.
             succeeded: Whether recovery resolved the violation.
+
+        Raises:
+            RecoveryFailedError: When consecutive recovery failures
+                exceed max_recovery_attempts.
         """
         with self._lock:
             if attempted:
                 self._recovery_attempts += 1
                 if succeeded:
                     self._recovery_successes += 1
+                # G7: Raise RecoveryFailedError when failures exceed max
+                if (
+                    not succeeded
+                    and self._recovery_attempts - self._recovery_successes
+                    > self._max_recovery_attempts
+                ):
+                    from agentassert_abc.exceptions import RecoveryFailedError
+                    raise RecoveryFailedError(
+                        f"Recovery failed after {self._recovery_attempts} attempts "
+                        f"({self._recovery_successes} successes)"
+                    )
 
     def reset(self) -> None:
         """Reset monitor for a new session. Thread-safe. (RF-26)"""
@@ -175,15 +206,34 @@ class SessionMonitor:
             self._recovery_successes = 0
 
     def check_preconditions(
-        self, state: dict[str, Any]
+        self,
+        state: dict[str, Any],
+        raise_on_failure: bool = True,
     ) -> PreconditionCheckResult:
-        """Check all preconditions — patent §3.2 step 2. Thread-safe."""
+        """Check all preconditions — patent §3.2 step 2. Thread-safe.
+
+        Args:
+            state: Agent state to check preconditions against.
+            raise_on_failure: If True (default), raise
+                PreconditionFailedError when any precondition fails.
+
+        Raises:
+            PreconditionFailedError: When raise_on_failure is True
+                and any precondition is not met.
+        """
         results = evaluate_preconditions(self._contract, state)
         failed = [r.name for r in results if not r.satisfied]
-        return PreconditionCheckResult(
+        result = PreconditionCheckResult(
             all_met=len(failed) == 0,
             failed_names=failed,
         )
+        # G7: Raise PreconditionFailedError on failure when enabled
+        if raise_on_failure and failed:
+            from agentassert_abc.exceptions import PreconditionFailedError
+            raise PreconditionFailedError(
+                f"Preconditions failed: {', '.join(failed)}"
+            )
+        return result
 
     def session_summary(self) -> SessionSummary:
         """Compute session-level aggregates + Θ — patent §3.2 step 8. Thread-safe."""

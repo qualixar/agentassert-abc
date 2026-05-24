@@ -184,7 +184,9 @@ preconditions:
       equals: true
 """)
         monitor = SessionMonitor(contract)
-        result = monitor.check_preconditions({"session.active": False})
+        result = monitor.check_preconditions(
+            {"session.active": False}, raise_on_failure=False
+        )
         assert result.all_met is False
         assert "session-ok" in result.failed_names
 

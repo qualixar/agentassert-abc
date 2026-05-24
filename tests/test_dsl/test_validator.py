@@ -210,11 +210,10 @@ class TestSatisfactionRanges:
             _make_contract(satisfaction={"p": 1.5, "delta": 0.1, "k": 3})
 
     def test_p_zero(self) -> None:
-        """SEC-10: p = 0.0 rejected at Pydantic model level (must be > 0)."""
-        import pydantic
-
-        with pytest.raises(pydantic.ValidationError, match="greater than 0"):
-            _make_contract(satisfaction={"p": 0.0, "delta": 0.1, "k": 3})
+        """SEC-10: p = 0.0 is accepted (vacuous pass — no compliance required)."""
+        # p=0.0 is valid: it means no hard compliance requirement (vacuously satisfied)
+        contract = _make_contract(satisfaction={"p": 0.0, "delta": 0.1, "k": 3})
+        assert contract.satisfaction.p == 0.0
 
     def test_delta_out_of_range(self) -> None:
         """SEC-10: delta > 1.0 rejected at Pydantic model level."""

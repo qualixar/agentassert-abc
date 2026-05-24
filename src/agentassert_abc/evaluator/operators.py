@@ -93,10 +93,15 @@ def evaluate_check(check: ConstraintCheck, state: dict[str, Any]) -> bool:
             return False
         return check.between[0] <= n <= check.between[1]
 
-    # H-18: expr operator — not yet implemented, documented as future work.
-    # Returns False (constraint unsatisfied) rather than silently passing.
+    # G5: expr operator — sandboxed Python expression evaluator.
     if check.expr is not None:
-        return False
+        from agentassert_abc.evaluator.expr_eval import SafeExprEvaluator
+
+        evalr = SafeExprEvaluator()
+        result = evalr.evaluate(check.expr, state)
+        if result.error is not None:
+            return False
+        return bool(result.value)
 
     # No operator set (should be caught by validator)
     return False

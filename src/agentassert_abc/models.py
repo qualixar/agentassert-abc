@@ -165,7 +165,7 @@ class SatisfactionParams(_FrozenModel):
     - k=3: recover from soft violations within 3 turns
     """
 
-    p: float = Field(0.95, gt=0.0, le=1.0)
+    p: float = Field(0.95, ge=0.0, le=1.0)
     delta: float = Field(0.1, gt=0.0, le=1.0)
     k: int = Field(3, ge=1, le=1000)
 

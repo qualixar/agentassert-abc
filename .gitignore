@@ -33,6 +33,13 @@ claim/pypi/
 # Internal dev files (never commit)
 .backup/
 
+# Project-local config (never commit)
+.claude/
+.gitnexus/
+graphify-out/
+*.bak
+CHANGELOG.md
+
 # Blockchain timestamp proofs (keep in .backup only)
 *.ots
 
