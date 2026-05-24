@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentAssert — Reliability Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0e17; --card: #111827; --text: #e2e8f0;
+  --accent: #3b82f6; --green: #10b981; --yellow: #f59e0b; --red: #ef4444;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; padding: 24px; }
+h1 { font-size: 24px; margin-bottom: 4px; }
+.subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
+.card { background: var(--card); border-radius: 12px; padding: 20px; }
+.card h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+.gauge-row { display: flex; align-items: center; gap: 20px; }
+.theta-value { font-size: 48px; font-weight: 700; }
+.theta-label { font-size: 14px; }
+.status-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.status-ready { background: rgba(16,185,129,0.2); color: var(--green); }
+.status-warn { background: rgba(245,158,11,0.2); color: var(--yellow); }
+.metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.metric { text-align: center; }
+.metric .value { font-size: 28px; font-weight: 700; }
+.metric .label { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+canvas { max-height: 280px; }
+.timeline { max-height: 240px; overflow-y: auto; }
+.timeline-item { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+.timeline-item .turn { color: #64748b; min-width: 48px; }
+.timeline-item .badge { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge-hard { background: rgba(239,68,68,0.2); color: var(--red); }
+.badge-soft { background: rgba(245,158,11,0.2); color: var(--yellow); }
+.badge-recovery { background: rgba(59,130,246,0.2); color: var(--accent); }
+</style>
+</head>
+<body>
+<h1>AgentAssert Dashboard</h1>
+<p class="subtitle">Real-time behavioral compliance monitoring — powered by Qualixar AI Reliability Engineering</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>Reliability Index Θ</h2>
+    <div class="gauge-row">
+      <div><div class="theta-value" id="thetaValue">--</div></div>
+      <div>
+        <div class="theta-label">Deployment Threshold: 0.90</div>
+        <div id="thetaStatus"></div>
+      </div>
+    </div>
+    <canvas id="thetaGauge" height="120"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Session Metrics</h2>
+    <div class="metric-grid">
+      <div class="metric"><div class="value" id="cBar">--</div><div class="label">Mean Compliance</div></div>
+      <div class="metric"><div class="value" id="dBar">--</div><div class="label">Mean Drift</div></div>
+      <div class="metric"><div class="value" id="events">--</div><div class="label">Violations</div></div>
+      <div class="metric"><div class="value" id="recovery">--</div><div class="label">Recovery Rate</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Drift Trajectory D(t)</h2>
+    <canvas id="driftChart" height="220"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Compliance Per Turn</h2>
+    <canvas id="complianceChart" height="220"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Violation Timeline</h2>
+    <div class="timeline" id="violationTimeline">
+      <div class="timeline-item"><span style="color:#94a3b8">No session data loaded.</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Recovery Waterfall</h2>
+    <canvas id="recoveryChart" height="220"></canvas>
+  </div>
+</div>
+
+<script>
+// --- Chart.js defaults ---
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
+// --- Gauge (doughnut half-circle) ---
+const gaugeCtx = document.getElementById('thetaGauge').getContext('2d');
+const gaugeChart = new Chart(gaugeCtx, {
+  type: 'doughnut',
+  data: {
+    datasets: [{
+      data: [0, 1],
+      backgroundColor: ['#3b82f6', 'rgba(255,255,255,0.05)'],
+      borderWidth: 0,
+      circumference: 180,
+      rotation: 270,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    cutout: '75%',
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    animation: { duration: 600 },
+  }
+});
+
+// --- Drift line chart ---
+const driftCtx = document.getElementById('driftChart').getContext('2d');
+const driftChart = new Chart(driftCtx, {
+  type: 'line',
+  data: { labels: [], datasets: [{
+    label: 'D(t)', data: [],
+    borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)',
+    fill: true, tension: 0.3, pointRadius: 2,
+  }]},
+  options: {
+    responsive: true,
+    scales: {
+      y: { min: 0, max: 1, ticks: { stepSize: 0.2 } },
+      x: { title: { display: true, text: 'Turn' } }
+    },
+    plugins: {
+      annotation: {
+        annotations: {
+          warningLine: { type: 'line', yMin: 0.3, yMax: 0.3, borderColor: '#f59e0b', borderWidth: 1, borderDash: [4,4], label: { display: true, content: 'warning' }},
+          criticalLine: { type: 'line', yMin: 0.6, yMax: 0.6, borderColor: '#ef4444', borderWidth: 1, borderDash: [4,4], label: { display: true, content: 'critical'}},
+        }
+      }
+    }
+  }
+});
+
+// --- Compliance stacked bar ---
+const compCtx = document.getElementById('complianceChart').getContext('2d');
+const complianceChart = new Chart(compCtx, {
+  type: 'bar',
+  data: { labels: [], datasets: [
+    { label: 'Hard C', data: [], backgroundColor: '#10b981' },
+    { label: 'Soft C', data: [], backgroundColor: '#3b82f6' },
+  ]},
+  options: {
+    responsive: true,
+    scales: { y: { min: 0, max: 1, stacked: false }, x: { stacked: false } },
+    plugins: { legend: { position: 'bottom' } }
+  }
+});
+
+// --- Recovery waterfall ---
+const recoveryCtx = document.getElementById('recoveryChart').getContext('2d');
+const recoveryChart = new Chart(recoveryCtx, {
+  type: 'bar',
+  data: { labels: [], datasets: [
+    { label: 'Attempts', data: [], backgroundColor: '#3b82f6' },
+    { label: 'Successes', data: [], backgroundColor: '#10b981' },
+  ]},
+  options: {
+    responsive: true,
+    scales: { y: { min: 0, beginAtZero: true } },
+    plugins: { legend: { position: 'bottom' } }
+  }
+});
+
+// --- API: update dashboard from session data ---
+window.updateDashboard = function(data) {
+  // Theta
+  const theta = data.theta || 0;
+  document.getElementById('thetaValue').textContent = theta.toFixed(3);
+  document.getElementById('thetaValue').style.color = theta >= 0.90 ? '#10b981' : '#f59e0b';
+  const statusEl = document.getElementById('thetaStatus');
+  statusEl.innerHTML = theta >= 0.90
+    ? '<span class="status-badge status-ready">DEPLOYMENT READY</span>'
+    : '<span class="status-badge status-warn">NEEDS REVIEW</span>';
+  gaugeChart.data.datasets[0].data = [theta, Math.max(0, 1 - theta)];
+
+  // Metrics
+  document.getElementById('cBar').textContent = (data.c_bar || 0).toFixed(3);
+  document.getElementById('dBar').textContent = (data.d_bar || 0).toFixed(3);
+  document.getElementById('events').textContent = data.total_events || 0;
+  document.getElementById('recovery').textContent = ((data.recovery_rate || 0) * 100).toFixed(0) + '%';
+
+  // Drift series
+  if (data.drift_series && data.drift_series.length > 0) {
+    driftChart.data.labels = data.drift_series.map((_, i) => i + 1);
+    driftChart.data.datasets[0].data = data.drift_series;
+  }
+
+  // Compliance series
+  if (data.compliance_series && data.compliance_series.length > 0) {
+    complianceChart.data.labels = data.compliance_series.map((_, i) => i + 1);
+    complianceChart.data.datasets[0].data = data.compliance_series.map(c => c.hard || 0);
+    complianceChart.data.datasets[1].data = data.compliance_series.map(c => c.soft || 0);
+  }
+
+  // Violation timeline
+  if (data.violations && data.violations.length > 0) {
+    const tl = document.getElementById('violationTimeline');
+    tl.innerHTML = data.violations.map(v => {
+      const cls = v.type === 'hard' ? 'badge-hard' : 'badge-soft';
+      const typ = v.type === 'recovery' ? 'badge-recovery' : cls;
+      return `<div class="timeline-item">
+        <span class="turn">T${v.turn}</span>
+        <span class="badge ${cls}">${v.type.toUpperCase()}</span>
+        <span>${v.constraint}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Recovery chart
+  if (data.recovery_series && data.recovery_series.length > 0) {
+    recoveryChart.data.labels = data.recovery_series.map((_, i) => i + 1);
+    recoveryChart.data.datasets[0].data = data.recovery_series.map(r => r.attempts || 0);
+    recoveryChart.data.datasets[1].data = data.recovery_series.map(r => r.successes || 0);
+  }
+
+  gaugeChart.update();
+  driftChart.update();
+  complianceChart.update();
+  recoveryChart.update();
+};
+</script>
+</body>
+</html>

@@ -118,6 +118,34 @@ def __getattr__(name: str):  # type: ignore[no-untyped-def]  # noqa: N807
         "ExprResult": ("agentassert_abc.evaluator.expr_eval", "ExprResult"),
         # Adapters (F-08: export adapters)
         "GenericAdapter": ("agentassert_abc.integrations.generic", "GenericAdapter"),
+        "LangGraphAdapter": ("agentassert_abc.integrations.langgraph", "LangGraphAdapter"),
+        "CrewAIAdapter": ("agentassert_abc.integrations.crewai", "CrewAIAdapter"),
+        "OpenAIAgentsAdapter": (
+            "agentassert_abc.integrations.openai_agents", "OpenAIAgentsAdapter",
+        ),
+        "PydanticAIAdapter": ("agentassert_abc.integrations.pydantic_ai", "PydanticAIAdapter"),
+        # Metrics (F0/F1: adaptive thresholds)
+        "AdaptiveThresholdEngine": ("agentassert_abc.metrics.adaptive", "AdaptiveThresholdEngine"),
+        "AdaptiveConfig": ("agentassert_abc.metrics.adaptive", "AdaptiveConfig"),
+        # Monitor (F9: EventBus + MCP)
+        "EventBus": ("agentassert_abc.monitor.events", "EventBus"),
+        "EventKind": ("agentassert_abc.monitor.events", "EventKind"),
+        "ViolationEvent": ("agentassert_abc.monitor.events", "ViolationEvent"),
+        "RecoveryEvent": ("agentassert_abc.monitor.events", "RecoveryEvent"),
+        "DriftWarningEvent": ("agentassert_abc.monitor.events", "DriftWarningEvent"),
+        "SessionSummaryEvent": ("agentassert_abc.monitor.events", "SessionSummaryEvent"),
+        "MCPServerMonitor": ("agentassert_abc.monitor.mcp_monitor", "MCPServerMonitor"),
+        "ToolCallVerdict": ("agentassert_abc.monitor.mcp_monitor", "ToolCallVerdict"),
+        # Exporters (Phase 6)
+        "OTelExporter": ("agentassert_abc.exporters.otel", "OTelExporter"),
+        "OTelSpan": ("agentassert_abc.exporters.otel", "OTelSpan"),
+        "EUAIActReportGenerator": (
+            "agentassert_abc.exporters.eu_ai_act", "EUAIActReportGenerator",
+        ),
+        "EUAIReport": ("agentassert_abc.exporters.eu_ai_act", "EUAIReport"),
+        # A2A (Phase 7)
+        "A2AComplianceBridge": ("agentassert_abc.integrations.a2a", "A2AComplianceBridge"),
+        "A2AComplianceResult": ("agentassert_abc.integrations.a2a", "A2AComplianceResult"),
     }
     if name in _lazy_map:
         import importlib
@@ -171,6 +199,30 @@ __all__ = [
     "ExprResult",
     # Adapters (F-08)
     "GenericAdapter",
+    "LangGraphAdapter",
+    "CrewAIAdapter",
+    "OpenAIAgentsAdapter",
+    "PydanticAIAdapter",
+    # Metrics (F0/F1: adaptive thresholds)
+    "AdaptiveThresholdEngine",
+    "AdaptiveConfig",
+    # Monitor (F9)
+    "EventBus",
+    "EventKind",
+    "ViolationEvent",
+    "RecoveryEvent",
+    "DriftWarningEvent",
+    "SessionSummaryEvent",
+    "MCPServerMonitor",
+    "ToolCallVerdict",
+    # Exporters (Phase 6)
+    "OTelExporter",
+    "OTelSpan",
+    "EUAIActReportGenerator",
+    "EUAIReport",
+    # A2A (Phase 7)
+    "A2AComplianceBridge",
+    "A2AComplianceResult",
     # Models
     "ConstraintCheck",
     "ContractMetadata",
