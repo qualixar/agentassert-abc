@@ -427,8 +427,10 @@ def check_c5_independence(
     # P(B) = B violations / total turns
     p_b = len(b_violations) / max_turn if max_turn > 0 else 0.0
 
-    # P(B | A_prev) = B violations in A_prev turns / A_prev turns
-    a_prev = {t - 1 for t in a_violations if t > 1}
+    # P(B | A_prev) = P(B violates at t | A violated at the previous turn t-1).
+    # Candidate turns are those whose PRECEDING turn had an A violation: {a+1}.
+    # (Previously {a-1}, which tested whether B *leads* A — the reverse of A->B causation.)
+    a_prev = {t + 1 for t in a_violations if t + 1 <= max_turn}
     if not a_prev:
         p_b_given_a = 0.0
     else:
