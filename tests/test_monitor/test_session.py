@@ -143,6 +143,34 @@ invariants:
         summary = monitor.session_summary()
         assert summary.theta >= 0.90  # Deployment ready
 
+    def test_session_theta_uses_contract_reliability_weights(self) -> None:
+        from agentassert_abc.dsl.parser import loads_contract
+        from agentassert_abc.monitor.session import SessionMonitor
+
+        contract = loads_contract("""
+contractspec: "0.1"
+kind: agent
+name: test
+description: test
+version: "1.0.0"
+invariants:
+  hard:
+    - name: check
+      check:
+        field: x
+        equals: true
+reliability:
+  weights:
+    compliance: 1.0
+    drift: 0.0
+    recovery: 0.0
+    stress: 0.0
+""")
+        monitor = SessionMonitor(contract)
+        monitor.step({"x": False})
+
+        assert monitor.session_summary().theta == 0.5
+
 
 class TestCheckPreconditions:
     """check_preconditions() from patent §3.2 step 2."""

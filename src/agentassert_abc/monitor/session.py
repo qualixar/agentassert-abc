@@ -261,6 +261,7 @@ class SessionMonitor:
             d_bar=self._drift.mean_drift,
             events=self._total_events,
             recovery_rate=recovery_rate,
+            weights=self._contract.reliability.weights if self._contract.reliability else None,
         )
 
         return SessionSummary(
