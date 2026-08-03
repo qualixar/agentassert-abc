@@ -53,3 +53,4 @@ uv.lock
 # OS
 .DS_Store
 Thumbs.db
+missions.jsonl
