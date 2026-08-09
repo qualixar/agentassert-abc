@@ -67,6 +67,8 @@ __all__ = [
     "DryRunClient",
     "ExperimentSummary",
     "RunError",
+    "_FRONTIER_MODEL_PAIRS",
+    "build_client",
     "main",
     "run_experiment",
 ]
@@ -199,8 +201,147 @@ _LOCAL_MODEL_PAIRS: dict[str, tuple[str, str]] = {
     "different_vendor": (config.LOCAL_MODELS[0], config.LOCAL_MODELS[1]),
 }
 
+# ---------------------------------------------------------------------------
+# Frontier model pairs (permanently inert unless FRONTIER_ENABLED=True)
+# ---------------------------------------------------------------------------
+#
+# Maps each sharing condition to (model_a, model_b) for use by frontier
+# adapters.  These identifiers are locked before the first confirmatory run;
+# any substitution requires a dated preregistration amendment BEFORE outcomes
+# are visible.
+#
+# Primary conditions (all through OpenRouterClient):
+#   same_model:       Qwen3-7B-Fast × Qwen3-7B-Fast (maximal shared config)
+#   same_vendor:      Qwen3-7B-Fast × Qwen2.5-3B (same Alibaba family, diff size)
+#   different_vendor: Qwen3-7B-Fast × Gemma-3-1B (cross-vendor, Google vs Alibaba)
+#
+# Breadth arms for different_vendor replication:
+#   different_vendor_meta: MetaSparkClient (Meta Llama) × OpenRouter Qwen
+#   different_vendor_grok: GrokBridgeClient (Grok, subscription) × OpenRouter Qwen
+#
+# SAFETY: reading this constant never constructs an adapter.  Adapters are
+# built only by build_client(..., "frontier") and require FRONTIER_ENABLED=True.
+_FRONTIER_MODEL_PAIRS: dict[str, tuple[str, str]] = {
+    # Primary arms (LLD-E §4.1, Table 1 rows 1-3)
+    "same_model": (
+        config.OPENROUTER_DEFAULT_MODEL,
+        config.OPENROUTER_DEFAULT_MODEL,
+    ),
+    "same_vendor": (
+        config.OPENROUTER_DEFAULT_MODEL,
+        config.OPENROUTER_QWEN_SAME_VENDOR,
+    ),
+    "different_vendor": (
+        config.OPENROUTER_DEFAULT_MODEL,
+        config.OPENROUTER_GEMMA_DIFF_VENDOR,
+    ),
+    # Breadth arms — additional different-vendor replication (LLD-E §4.1)
+    "different_vendor_meta": (
+        config.META_CONTRIBUTOR_MODEL,
+        config.OPENROUTER_DEFAULT_MODEL,
+    ),
+    "different_vendor_grok": (
+        config.GROK_MODEL,
+        config.OPENROUTER_DEFAULT_MODEL,
+    ),
+}
+
 # Deterministic (non-generative) node IDs — never passed to client.generate.
 _DETERMINISTIC_NODES: frozenset[str] = frozenset({"aggregator", "merge"})
+
+
+# ---------------------------------------------------------------------------
+# Public factory: build_client
+# ---------------------------------------------------------------------------
+
+# Valid frontier conditions — used for ValueError message construction.
+_FRONTIER_CONDITIONS: frozenset[str] = frozenset(_FRONTIER_MODEL_PAIRS)
+
+
+def build_client(condition: str, tier: str) -> ModelClient:
+    """Return the appropriate :class:`ModelClient` for *(condition, tier)*.
+
+    This factory is the single-call entry point for experiment callers who
+    need the right client without hard-coding adapter classes.  The frontier
+    gate is enforced *inside* each adapter's ``__init__``; this function does
+    not duplicate it.
+
+    Parameters
+    ----------
+    condition:
+        Model-sharing label.  For ``tier="frontier"`` must be one of the keys
+        in :data:`_FRONTIER_MODEL_PAIRS`.  Ignored for ``"dry"`` / ``"local"``.
+    tier:
+        One of:
+
+        ``"dry"``
+            Returns a :class:`DryRunClient` ($0, no network, no Ollama).
+        ``"local"``
+            Returns a :class:`~.models.LocalClient` (Ollama, $0 API cost).
+        ``"frontier"``
+            Returns the frontier adapter for *condition*.  **Raises
+            :class:`~.models.FrontierDisabledError` when
+            config.FRONTIER_ENABLED is False** (the safe default).  Also
+            raises when the required API key env var is missing.
+
+    Returns
+    -------
+    ModelClient
+        A client satisfying the :class:`~.motifs.ModelClient` protocol.
+
+    Raises
+    ------
+    FrontierDisabledError
+        *tier* is ``"frontier"`` and the gate is closed (config.FRONTIER_ENABLED
+        is False), or a required API key env var is absent.  Raised by the
+        adapter ``__init__`` before any network contact.
+    ValueError
+        Unknown *tier*, or *tier* is ``"frontier"`` with an unknown *condition*.
+
+    Notes
+    -----
+    Frontier condition routing:
+
+    +------------------------+-------------------------------+
+    | condition              | adapter                        |
+    +========================+===============================+
+    | same_model             | :class:`~.providers.OpenRouterClient` |
+    | same_vendor            | :class:`~.providers.OpenRouterClient` |
+    | different_vendor       | :class:`~.providers.OpenRouterClient` |
+    | different_vendor_meta  | :class:`~.providers.MetaSparkClient`  |
+    | different_vendor_grok  | :class:`~.providers.GrokBridgeClient` |
+    +------------------------+-------------------------------+
+
+    When FRONTIER_ENABLED is False (the permanent default tonight), every
+    frontier adapter raises at construction — so $0 is guaranteed regardless
+    of which condition is passed.
+    """
+    if tier == "dry":
+        return DryRunClient()
+
+    if tier == "local":
+        from agentassert_abc.experiments.models import LocalClient  # noqa: PLC0415
+        return LocalClient()
+
+    if tier == "frontier":
+        from agentassert_abc.experiments import providers  # noqa: PLC0415
+        # Gate is enforced inside each adapter __init__ (FrontierDisabledError).
+        # Unknown condition → ValueError BEFORE any adapter construction.
+        if condition in ("same_model", "same_vendor", "different_vendor"):
+            return providers.OpenRouterClient()
+        if condition == "different_vendor_meta":
+            return providers.MetaSparkClient()
+        if condition == "different_vendor_grok":
+            return providers.GrokBridgeClient()
+        valid = sorted(_FRONTIER_CONDITIONS)
+        raise ValueError(
+            f"Unknown frontier condition {condition!r}. "
+            f"Valid conditions: {valid!r}."
+        )
+
+    raise ValueError(
+        f"Unknown tier {tier!r}. Valid tiers: 'dry', 'local', 'frontier'."
+    )
 
 
 # ---------------------------------------------------------------------------
