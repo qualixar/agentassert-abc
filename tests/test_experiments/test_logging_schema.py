@@ -26,8 +26,9 @@ Coverage targets:
 
 from __future__ import annotations
 
+import dataclasses
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -39,6 +40,9 @@ from agentassert_abc.experiments.logging_schema import (
     MissionRecord,
     compute_y_graph,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Test fixtures / helpers
@@ -472,15 +476,15 @@ class TestImmutability:
 
     def test_component_record_is_frozen(self) -> None:
         comp = _comp("A")
-        with pytest.raises(Exception):  # FrozenInstanceError inherits from AttributeError
+        with pytest.raises(dataclasses.FrozenInstanceError):
             comp.hard_ok = False  # type: ignore[misc]
 
     def test_handoff_record_is_frozen(self) -> None:
         hoff = _hoff("A", "B")
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             hoff.handoff_ok = False  # type: ignore[misc]
 
     def test_mission_record_is_frozen(self) -> None:
         rec = _make_mission()
-        with pytest.raises(Exception):
+        with pytest.raises(dataclasses.FrozenInstanceError):
             rec.y_graph = False  # type: ignore[misc]

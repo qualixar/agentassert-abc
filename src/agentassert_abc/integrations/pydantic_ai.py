@@ -14,11 +14,14 @@ Phase 7 — Integration & Marketplace → Pydantic AI Adapter.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from agentassert_abc.integrations.base import AgentAdapter
 from agentassert_abc.models import ContractSpec  # noqa: TC001
 from agentassert_abc.monitor.session import SessionMonitor
+
+_logger = logging.getLogger(__name__)
 
 
 class PydanticAIAdapter(AgentAdapter):
@@ -91,5 +94,13 @@ class PydanticAIAdapter(AgentAdapter):
         are logged but do NOT raise by default (Pydantic AI agents
         handle errors via their own retry mechanism).
         """
-        self.check(agent_result)
+        step_result = self.check(agent_result)
+        # Ledger 5c: log hard violations so they are observable even without raising.
+        if step_result.hard_violations > 0:
+            violated = ", ".join(step_result.violated_names)
+            _logger.error(
+                "PydanticAIAdapter.guard: %d hard violation(s) detected [%s]",
+                step_result.hard_violations,
+                violated,
+            )
         return agent_result

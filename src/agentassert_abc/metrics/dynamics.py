@@ -120,9 +120,11 @@ class OUFitter:
 
             # Build prediction errors: y_{t+1} - (a * y_t + b)
             errors = y[1:] - (a * y[:-1] + b)
-            # Log-likelihood: -n/2 * log(2π) - n/2 * log(var) - SSE/(2*var)
+            # Ledger 2e: the errors vector has n-1 transitions, not n observations.
+            # Using n as the normalizer biases σ² ~5% low at n=20 and inflates log_lik.
+            n_err = len(errors)  # = n - 1
             sse = np.sum(errors ** 2)
-            log_lik = -0.5 * n * np.log(2 * np.pi * var_noise) - 0.5 * sse / var_noise
+            log_lik = -0.5 * n_err * np.log(2 * np.pi * var_noise) - 0.5 * sse / var_noise
             return -log_lik  # Minimize negative log-likelihood
 
         # Initial guess: method of moments
@@ -263,17 +265,20 @@ class LyapunovStabilityCheck:
                 ),
             )
 
-        # Positive significant slope: if gamma >> alpha, process is theoretically
-        # convergent — noisy empirical slope overrides to INCONCLUSIVE, not DIVERGENT.
+        # Ledger 2f: a significant POSITIVE V(e) slope contradicts the comment "→INCONCLUSIVE".
+        # Returning CONVERGENT here while V(e) is significantly *increasing* is wrong; the
+        # conservative and correct verdict is INCONCLUSIVE (theory says convergent but
+        # empirical evidence shows the opposite — we cannot certify stability).
         if fitted.gamma > fitted.alpha and fitted.gamma >= 0.05:
             return StabilityReport(
-                verdict=StabilityVerdict.CONVERGENT,
+                verdict=StabilityVerdict.INCONCLUSIVE,
                 params=fitted,
                 expected_v_decay=float(slope),
                 reason=(
                     "Theoretically convergent "
-                    f"(gamma={fitted.gamma:.4f} > alpha={fitted.alpha:.4f}); "
-                    f"empirical V(e) slope noisy (slope={slope:.6f}, p={p_value:.4f})"
+                    f"(gamma={fitted.gamma:.4f} > alpha={fitted.alpha:.4f}) "
+                    "but empirical V(e) slope is significantly positive "
+                    f"(slope={slope:.6f}, p={p_value:.4f}) — conservative INCONCLUSIVE"
                 ),
             )
 

@@ -265,11 +265,16 @@ class TestC3MonotoneDrift:
     """C3 — Monotone Drift (DYNAMIC)."""
 
     def test_holds_when_combined_under_max(self) -> None:
-        """Combined drift stays within max(drift_a, drift_b) + epsilon."""
-        drift_a = [0.1, 0.2, 0.3, 0.15, 0.25]
-        drift_b = [0.15, 0.1, 0.25, 0.2, 0.1]
-        # Combined is always <= max(a, b)
-        drift_combined = [0.12, 0.18, 0.28, 0.17, 0.22]
+        """Combined drift stays within max(drift_a, drift_b) + epsilon.
+
+        Ledger 2g: sequences shorter than 20 are now INCONCLUSIVE; use 20
+        elements so this test exercises the actual HOLDS path.
+        """
+        # Ledger 2g: repeat 5-element pattern x4 to satisfy the >=20 minimum
+        drift_a = [0.1, 0.2, 0.3, 0.15, 0.25] * 4       # 20 elements
+        drift_b = [0.15, 0.1, 0.25, 0.2, 0.1] * 4
+        # Combined is always <= max(a, b) at every timestep
+        drift_combined = [0.12, 0.18, 0.28, 0.17, 0.22] * 4
 
         result = check_c3_monotone_drift(drift_a, drift_b, drift_combined)
         assert result.verdict == ConditionVerdict.HOLDS

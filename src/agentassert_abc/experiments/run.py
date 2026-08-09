@@ -53,7 +53,7 @@ from agentassert_abc.experiments.analysis import (
     dependence_report,
     drift_report,
 )
-from agentassert_abc.experiments.budget import BudgetLedger
+from agentassert_abc.experiments.budget import BudgetExceeded, BudgetLedger
 from agentassert_abc.experiments.logging_schema import JsonlLogger, MissionRecord
 from agentassert_abc.experiments.models import ModelResponse
 from agentassert_abc.experiments.motifs import MOTIF_LIBRARY, ModelClient, Motif, run_mission
@@ -291,6 +291,7 @@ def _execute_mission_batch(
     out_path: Path | str,
     ledger: BudgetLedger,
     model_pairs: dict[str, tuple[str, str]],
+    per_call_ceiling: float = 0.0,
 ) -> list[MissionRecord]:
     """Execute all missions and append each to the JSONL log.
 
@@ -306,6 +307,13 @@ def _execute_mission_batch(
     all_missions: list[MissionRecord] = []
     task = TASK_LIBRARY[0]  # arith_add — DryRunClient returns its ground truth
 
+    # LLD-E §6.3: prospective worst-case budget gate before each batch of <=25.
+    # per_call_ceiling is 0.0 for $0 dry/local clients; a paid FrontierClient
+    # MUST pass config.PER_CALL_CEILING_USD so the $19.50 hard stop is live.
+    batch_size = 25
+    total = len(motifs) * len(sharing_conditions) * n_per_cell
+    issued = 0
+
     for motif in motifs:
         for condition in sharing_conditions:
             model_a, model_b = model_pairs.get(
@@ -314,6 +322,15 @@ def _execute_mission_batch(
             )
             assignment = _build_model_assignment(motif, model_a, model_b)
             for i in range(n_per_cell):
+                if issued % batch_size == 0:
+                    upcoming = min(batch_size, total - issued)
+                    if not ledger.plan_batch(per_call_ceiling, upcoming):
+                        raise BudgetExceeded(
+                            f"Budget stop before batch: spent={ledger.spent:.6f} USD; "
+                            f"worst-case next {upcoming} calls at "
+                            f"{per_call_ceiling:.6f}/call would exceed the "
+                            f"{config.BUDGET_STOP_USD} USD hard stop."
+                        )
                 mission_id = f"mission-{motif.name}-{condition}-{i}"
                 cluster_id = f"cluster-{condition}-{i}"
                 record = run_mission(
@@ -324,6 +341,7 @@ def _execute_mission_batch(
                 )
                 logger.append(record)
                 ledger.record(record.cost_usd)
+                issued += 1
                 all_missions.append(record)
     return all_missions
 
@@ -377,8 +395,11 @@ def run_experiment(
     """
     is_dry = isinstance(client, DryRunClient)
     model_pairs = _DRY_MODEL_PAIRS if is_dry else _LOCAL_MODEL_PAIRS
+    # DryRun/Local clients cost $0 → ceiling 0.0. A future paid FrontierClient
+    # must pass config.PER_CALL_CEILING_USD to arm the §6.3 batch gate.
     all_missions = _execute_mission_batch(
-        client, motifs, sharing_conditions, n_per_cell, out_path, ledger, model_pairs
+        client, motifs, sharing_conditions, n_per_cell, out_path, ledger, model_pairs,
+        per_call_ceiling=0.0,
     )
     return _build_summary(all_missions, p0, alpha, ledger, out_path)
 
@@ -518,8 +539,8 @@ def main() -> None:
         ledger=ledger,
     )
 
-    if dry_run_mode:
-        assert summary.budget_spent == 0.0, (
+    if dry_run_mode and summary.budget_spent != 0.0:
+        raise RunError(
             f"DRY-RUN BUDGET VIOLATION: spent={summary.budget_spent} USD "
             "(expected 0.0). FrontierClient.generate must NOT have been called."
         )

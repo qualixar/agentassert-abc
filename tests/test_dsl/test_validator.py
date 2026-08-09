@@ -83,37 +83,36 @@ class TestRecoveryCrossReferences:
 
 
 class TestOperatorValidation:
-    """Each ConstraintCheck must have exactly one operator."""
+    """Each ConstraintCheck must have exactly one operator (Ledger 3b HARD-FAIL)."""
 
-    def test_no_operator_set(self) -> None:
-        from agentassert_abc.dsl.validator import validate_contract
+    def test_no_operator_set_raises_validation_error(self) -> None:
+        # Ledger 3b: no-operator ConstraintCheck now raises pydantic.ValidationError
+        # at model construction, not a validate_contract() code.
+        import pydantic
 
-        contract = _make_contract(
-            invariants={
-                "hard": [
-                    {"name": "bad", "check": {"field": "x"}},
-                ],
-                "soft": [],
-            },
-        )
-        errors = validate_contract(contract)
-        codes = [e.code for e in errors]
-        assert "NO_OPERATOR" in codes
+        with pytest.raises(pydantic.ValidationError, match="exactly one operator"):
+            _make_contract(
+                invariants={
+                    "hard": [
+                        {"name": "bad", "check": {"field": "x"}},
+                    ],
+                    "soft": [],
+                },
+            )
 
-    def test_multiple_operators_set(self) -> None:
-        from agentassert_abc.dsl.validator import validate_contract
+    def test_multiple_operators_set_raises_validation_error(self) -> None:
+        # Ledger 3b: multiple-operator ConstraintCheck raises pydantic.ValidationError.
+        import pydantic
 
-        contract = _make_contract(
-            invariants={
-                "hard": [
-                    {"name": "bad", "check": {"field": "x", "equals": True, "gte": 0.5}},
-                ],
-                "soft": [],
-            },
-        )
-        errors = validate_contract(contract)
-        codes = [e.code for e in errors]
-        assert "MULTIPLE_OPERATORS" in codes
+        with pytest.raises(pydantic.ValidationError, match="exactly one operator"):
+            _make_contract(
+                invariants={
+                    "hard": [
+                        {"name": "bad", "check": {"field": "x", "equals": True, "gte": 0.5}},
+                    ],
+                    "soft": [],
+                },
+            )
 
     def test_single_operator_valid(self) -> None:
         from agentassert_abc.dsl.validator import validate_contract
@@ -222,12 +221,19 @@ class TestSatisfactionRanges:
         with pytest.raises(pydantic.ValidationError, match="less than or equal to 1"):
             _make_contract(satisfaction={"p": 0.95, "delta": 2.0, "k": 3})
 
-    def test_k_too_small(self) -> None:
-        """SEC-10: k = 0 rejected at Pydantic model level (must be >= 1)."""
+    def test_k_negative_rejected(self) -> None:
+        """k = 0 is valid (LLD-A §18-14 degenerate); k < 0 is rejected."""
         import pydantic
 
-        with pytest.raises(pydantic.ValidationError, match="greater than or equal to 1"):
-            _make_contract(satisfaction={"p": 0.95, "delta": 0.1, "k": 0})
+        ok = _make_contract(satisfaction={"p": 0.95, "delta": 0.1, "k": 0})
+        assert ok.satisfaction.k == 0
+        with pytest.raises(pydantic.ValidationError, match="greater than or equal to 0"):
+            _make_contract(satisfaction={"p": 0.95, "delta": 0.1, "k": -1})
+
+    def test_delta_zero_valid(self) -> None:
+        """delta = 0 is valid (LLD-A §16 acceptable-region boundary 1-delta)."""
+        contract = _make_contract(satisfaction={"p": 0.95, "delta": 0.0, "k": 3})
+        assert contract.satisfaction.delta == 0.0
 
     def test_valid_satisfaction_no_errors(self) -> None:
         from agentassert_abc.dsl.validator import validate_contract
@@ -239,19 +245,17 @@ class TestSatisfactionRanges:
 
 
 class TestWeightSums:
-    """Drift and reliability weights should sum to ~1.0."""
+    """Drift and reliability weights must sum to exactly 1.0 (Ledger 3a HARD-FAIL)."""
 
-    def test_drift_weights_bad_sum_warning(self) -> None:
-        from agentassert_abc.dsl.validator import validate_contract
+    def test_drift_weights_bad_sum_raises_validation_error(self) -> None:
+        # Ledger 3a: bad sum is now a HARD-FAIL (pydantic.ValidationError at construction,
+        # not a validate_contract() WARNING).
+        import pydantic
 
-        contract = _make_contract(
-            drift={"weights": {"compliance": 0.9, "distributional": 0.9}}
-        )
-        errors = validate_contract(contract)
-        codes = [e.code for e in errors]
-        assert "DRIFT_WEIGHTS_SUM" in codes
+        with pytest.raises(pydantic.ValidationError, match="DriftWeights must sum to 1.0"):
+            _make_contract(drift={"weights": {"compliance": 0.9, "distributional": 0.9}})
 
-    def test_drift_weights_good_sum_no_warning(self) -> None:
+    def test_drift_weights_good_sum_no_error(self) -> None:
         from agentassert_abc.dsl.validator import validate_contract
 
         contract = _make_contract(
@@ -260,22 +264,39 @@ class TestWeightSums:
         errors = validate_contract(contract)
         assert len([e for e in errors if e.code == "DRIFT_WEIGHTS_SUM"]) == 0
 
-    def test_reliability_weights_bad_sum_warning(self) -> None:
+    def test_reliability_weights_bad_sum_raises_validation_error(self) -> None:
+        # Ledger 3a: bad sum is now a HARD-FAIL (pydantic.ValidationError at construction).
+        import pydantic
+
+        with pytest.raises(
+            pydantic.ValidationError, match="ReliabilityWeights must sum to 1.0"
+        ):
+            _make_contract(
+                reliability={
+                    "weights": {
+                        "compliance": 0.5,
+                        "drift": 0.5,
+                        "event_freq": 0.5,
+                        "recovery_success": 0.5,
+                    }
+                }
+            )
+
+    def test_reliability_weights_good_sum_no_error(self) -> None:
         from agentassert_abc.dsl.validator import validate_contract
 
         contract = _make_contract(
             reliability={
                 "weights": {
-                    "compliance": 0.5,
-                    "drift": 0.5,
-                    "event_freq": 0.5,
-                    "recovery_success": 0.5,
+                    "compliance": 0.35,
+                    "drift": 0.25,
+                    "event_freq": 0.20,
+                    "recovery_success": 0.20,
                 }
             }
         )
         errors = validate_contract(contract)
-        codes = [e.code for e in errors]
-        assert "RELIABILITY_WEIGHTS_SUM" in codes
+        assert len([e for e in errors if e.code == "RELIABILITY_WEIGHTS_SUM"]) == 0
 
 
 class TestOperatorTypeValidation:

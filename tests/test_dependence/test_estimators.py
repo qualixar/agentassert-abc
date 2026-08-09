@@ -16,8 +16,6 @@ implementation's own output:
 """
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pytest
 
@@ -113,7 +111,7 @@ def test_tetrachoric_independence_is_zero() -> None:
 
 def test_one_factor_loadings_recovers_known_lambdas() -> None:
     lam = np.array([0.7, 0.6, 0.5, 0.8])
-    R = np.outer(lam, lam)
+    R = np.outer(lam, lam)  # noqa: N806 — R = correlation matrix, math convention
     np.fill_diagonal(R, 1.0)  # R = lam lam' + Psi, Psi diagonal
     est = one_factor_loadings(R)
     # Loadings identified up to a global sign; align then compare.
@@ -123,6 +121,48 @@ def test_one_factor_loadings_recovers_known_lambdas() -> None:
 
 
 def test_one_factor_requires_three_indicators() -> None:
-    R = np.array([[1.0, 0.42], [0.42, 1.0]])
+    R = np.array([[1.0, 0.42], [0.42, 1.0]])  # noqa: N806 — R = correlation matrix, math convention
     with pytest.raises(DependenceError):
         one_factor_loadings(R)
+
+
+def test_tau_b_equals_phi_identity() -> None:
+    """Ledger 0g: for a 2x2 binary table tau_b = phi (LLD-B §6.3).
+
+    LLD-B §6.3 proves this algebraically: in the binary case tau_b (tie-normalised
+    Kendall) collapses to the phi coefficient.  We verify this holds numerically
+    for several non-degenerate tables.
+    """
+    # Helper: tau_b = tau_a / sqrt(p_a*(1-p_a)*p_b*(1-p_b)) * 0.25
+    # But the algebraic identity (LLD-B §6.3) is simpler:
+    #   phi = (p11*p00 - p10*p01) / sqrt(p_a*(1-p_a)*p_b*(1-p_b))
+    #   tau_b = tau_a / sqrt(...) — same denominator with tau_a = 2*(p11*p00 - p10*p01)
+    # => tau_b = 2 * phi is only for equal marginals; the exact identity is phi = tau_b.
+    # We verify directly via scipy.stats.kendalltau on the unpacked pair sequences.
+    import scipy.stats
+
+    from agentassert_abc.dependence.estimators import (
+        CoFailureTable,
+        phi_coefficient,
+    )
+
+    tables = [
+        CoFailureTable(n11=40, n10=10, n01=20, n00=30),
+        CoFailureTable(n11=50, n10=0, n01=0, n00=50),   # perfect coupling
+        CoFailureTable(n11=25, n10=25, n01=25, n00=25), # independence
+        CoFailureTable(n11=10, n10=40, n01=5, n00=45),
+    ]
+    for table in tables:
+        # Expand the contingency table back into paired sequences
+        pairs_a: list[int] = (
+            [1] * table.n11 + [1] * table.n10 + [0] * table.n01 + [0] * table.n00
+        )
+        pairs_b: list[int] = (
+            [1] * table.n11 + [0] * table.n10 + [1] * table.n01 + [0] * table.n00
+        )
+        tau_b, _ = scipy.stats.kendalltau(pairs_a, pairs_b)
+        phi = phi_coefficient(table)
+        # LLD-B §6.3: for binary variables tau_b = phi (algebraic identity)
+        assert tau_b == pytest.approx(phi, abs=1e-9), (
+            f"tau_b={tau_b:.6f} != phi={phi:.6f} for table {table}"
+        )

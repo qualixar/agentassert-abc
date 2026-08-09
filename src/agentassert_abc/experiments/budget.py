@@ -23,6 +23,7 @@ individual call records.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from agentassert_abc.exceptions import AgentAssertError
@@ -132,14 +133,14 @@ class BudgetLedger:
         Use :meth:`checked_spend` for safe pre-checked recording.
 
         Args:
-            cost_usd: API charge to record in USD; must be ``>= 0``.
+            cost_usd: API charge to record in USD; must be finite and ``>= 0``.
 
         Raises:
-            ValueError: if ``cost_usd < 0``.
+            ValueError: if ``cost_usd`` is NaN/inf or ``< 0``.
         """
-        if cost_usd < 0:
+        if not math.isfinite(cost_usd) or cost_usd < 0:
             raise ValueError(
-                f"cost_usd must be non-negative, got {cost_usd!r}"
+                f"cost_usd must be finite and non-negative, got {cost_usd!r}"
             )
         self._spent += cost_usd
 

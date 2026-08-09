@@ -23,7 +23,6 @@ import pytest
 
 from agentassert_abc.experiments import config
 
-
 # ---------------------------------------------------------------------------
 # Deferred import so missing module fails on collection, not on first test
 # ---------------------------------------------------------------------------
@@ -395,9 +394,11 @@ class TestGenerateDispatcher:
 
     def test_routes_frontier_model_raises_when_disabled(self) -> None:
         m = _import_models()
-        with patch.object(config, "FRONTIER_ENABLED", False):
-            with pytest.raises(m.FrontierDisabledError):
-                m.generate(model="openai/gpt-5-mini", prompt="test")
+        with (
+            patch.object(config, "FRONTIER_ENABLED", False),
+            pytest.raises(m.FrontierDisabledError),
+        ):
+            m.generate(model="openai/gpt-5-mini", prompt="test")
 
     def test_routes_frontier_model_when_enabled(self) -> None:
         m = _import_models()

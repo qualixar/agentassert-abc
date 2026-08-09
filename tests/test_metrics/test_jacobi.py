@@ -14,6 +14,8 @@ Covers:
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -26,7 +28,6 @@ from agentassert_abc.metrics.jacobi import (
     fit_jacobi_mom,
     identifiability_gate,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper: generate AR(1) approximation to Jacobi stationary process
@@ -61,7 +62,7 @@ def _make_jacobi_ar1(
     stat_var = theta * (1.0 - theta) * sigma2 / (2.0 * kappa + sigma2)
     eps_std = float(np.sqrt(stat_var * (1.0 - phi**2)))
 
-    X = np.empty(n)
+    X = np.empty(n)  # noqa: N806 — X = time-series array, math convention
     X[0] = theta
     for t in range(1, n):
         X[t] = theta + phi * (X[t - 1] - theta) + rng.normal(0.0, eps_std)
@@ -128,7 +129,7 @@ class TestJacobiParams:
     def test_immutability(self) -> None:
         """JacobiParams is frozen — direct assignment must raise FrozenInstanceError."""
         params = JacobiParams(kappa=1.0, theta=0.5, sigma2=1.0)
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(dataclasses.FrozenInstanceError):
             params.kappa = 2.0  # type: ignore[misc]
 
 
@@ -295,12 +296,12 @@ class TestIdentifiabilityGate:
         rng = np.random.default_rng(42)
         # AR(1) series confined near theta=0.4 — never reaches near 0 or 1
         n = 300
-        X = np.zeros(n)
+        X = np.zeros(n)  # noqa: N806 — X = time-series array, math convention
         X[0] = 0.4
         phi = 0.6
         for t in range(1, n):
             X[t] = 0.4 + phi * (X[t - 1] - 0.4) + rng.normal(0, 0.03)
-        X = np.clip(X, 0.0, 1.0)
+        X = np.clip(X, 0.0, 1.0)  # noqa: N806 — X uppercase, math convention
         # Max range: ~0.4 ± 5*0.048 ≈ [0.16, 0.64] — no boundary visits with eps=0.1
 
         result = identifiability_gate(X, dt=1.0, eps=0.1)
@@ -313,21 +314,25 @@ class TestIdentifiabilityGate:
         """Refusal reason must reference exploration failure."""
         rng = np.random.default_rng(99)
         n = 200
-        X = np.zeros(n)
+        X = np.zeros(n)  # noqa: N806 — X = time-series array, math convention
         X[0] = 0.35
         for t in range(1, n):
             X[t] = 0.35 + 0.5 * (X[t - 1] - 0.35) + rng.normal(0, 0.02)
-        X = np.clip(X, 0.0, 1.0)
+        X = np.clip(X, 0.0, 1.0)  # noqa: N806 — X uppercase, math convention
 
         result = identifiability_gate(X, dt=1.0, eps=0.1)
         assert result.gate_passed is False
-        assert "exploration" in result.reason.lower() or "E0" in result.reason or "E1" in result.reason
+        assert (
+            "exploration" in result.reason.lower()
+            or "E0" in result.reason
+            or "E1" in result.reason
+        )
 
     def test_gate_result_immutable(self) -> None:
         """GateResult is frozen — direct assignment must raise FrozenInstanceError."""
         series = _make_jacobi_ar1(1.5, 0.5, 1.0, 1.0, n=500, seed=3)
         result = identifiability_gate(series, dt=1.0)
-        with pytest.raises(Exception):  # FrozenInstanceError
+        with pytest.raises(dataclasses.FrozenInstanceError):
             result.gate_passed = True  # type: ignore[misc]
 
     def test_constant_series_returns_gate_result_not_raises(self) -> None:

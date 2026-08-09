@@ -36,7 +36,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from agentassert_abc.exceptions import AgentAssertError
 
@@ -138,7 +138,7 @@ class MissionRecord:
         Scenario ID used as the bootstrap cluster key (LLD-E §8.1).
     motif:
         Graph topology: ``"series2"``, ``"series3"``, ``"parallel2"``,
-        ``"quorum3"``, or ``"hierarchy"``.
+        ``"quorum2of3"``, or ``"hierarchy"``.
     sharing_condition:
         Model-sharing condition: ``"same_model"``, ``"same_vendor"``,
         or ``"different_vendor"``.
@@ -166,8 +166,9 @@ class MissionRecord:
 
     mission_id: str
     cluster_id: str
-    motif: str
-    sharing_condition: str
+    # Ledger 3f: narrow from str to Literal so static analysis catches invalid values.
+    motif: Literal["series2", "series3", "parallel2", "quorum2of3", "hierarchy"]
+    sharing_condition: Literal["same_model", "same_vendor", "different_vendor"]
     route: tuple[str, ...]
     components: tuple[ComponentRecord, ...]
     handoffs: tuple[HandoffRecord, ...]
@@ -182,8 +183,9 @@ class MissionRecord:
         *,
         mission_id: str,
         cluster_id: str,
-        motif: str,
-        sharing_condition: str,
+        # Ledger 3f: Literal types narrow the parameter to valid values only.
+        motif: Literal["series2", "series3", "parallel2", "quorum2of3", "hierarchy"],
+        sharing_condition: Literal["same_model", "same_vendor", "different_vendor"],
         route: tuple[str, ...],
         components: tuple[ComponentRecord, ...],
         handoffs: tuple[HandoffRecord, ...],

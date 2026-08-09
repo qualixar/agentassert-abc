@@ -175,6 +175,10 @@ def tau_a_min_samples(eps: float, alpha: float) -> int:
 
     From LLD-B Thm B.9: ``floor(n/2) >= (2/eps^2) ln(2/alpha)``. The minimal n is
     ``2 * ceil((2/eps^2) ln(2/alpha))``. At eps = alpha = 0.05 this is 5904.
+
+    Ledger 0h: S3 asymptotic variance is 4/(9n), NOT 4/n. This theorem is for
+    tau_a (LLD-B Thm B.9); the S3 "n≈6000" figure uses an invalid variance for
+    binary tau_b. See LLD-B §6.10 for the correct binary tau_b/phi bound.
     """
     if not (0.0 < eps <= 1.0):
         raise DependenceError("eps must be in (0, 1]")
@@ -207,6 +211,12 @@ def one_factor_loadings(corr: np.ndarray) -> np.ndarray:
             "one-factor loadings are underidentified with fewer than 3 indicators"
         )
 
+    # Ledger 2c: a valid one-factor loading is in [0, 1] (LLD-B §6.5 convention
+    # λ_j ≤ 1−κ). A near-zero R[j,k] just above the 1e-12 floor produces
+    # val = R[i,j]*R[i,k]/1e-6 ≈ 900, which is noise-dominated, not a loading.
+    # Filter any triad whose implied loading (sqrt(val)) exceeds 1+tol.
+    _loading_max = 1.0 + 1e-6  # small tolerance for floating-point rounding
+
     lam_abs = np.empty(m)
     for i in range(m):
         ratios: list[float] = []
@@ -217,8 +227,12 @@ def one_factor_loadings(corr: np.ndarray) -> np.ndarray:
                 if abs(R[j, k]) < 1e-12:
                     continue
                 val = R[i, j] * R[i, k] / R[j, k]
-                if val > 0.0:
-                    ratios.append(val)
+                if val <= 0.0:
+                    continue
+                # Skip noise-dominated triads whose implied loading exceeds 1
+                if math.sqrt(val) > _loading_max:
+                    continue
+                ratios.append(val)
         if not ratios:
             raise DependenceError(
                 f"indicator {i} has no valid triad; one-factor model not identified"

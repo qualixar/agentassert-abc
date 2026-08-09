@@ -22,7 +22,6 @@ from agentassert_abc.experiments.config import (
     PER_CALL_CEILING_USD,
 )
 
-
 # ---------------------------------------------------------------------------
 # BudgetExceeded exception
 # ---------------------------------------------------------------------------

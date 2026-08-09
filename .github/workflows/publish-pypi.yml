@@ -17,15 +17,16 @@ jobs:
       url: https://pypi.org/p/agentassert-abc
 
     steps:
-      - uses: actions/checkout@v4
+      # Ledger 4b: SHA-pinned to prevent tag-mutation supply-chain attacks.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4
         with:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
 
@@ -42,8 +43,9 @@ jobs:
           fi
           echo "Version verified: ${PKG_VERSION}"
 
+      # Ledger 4b: SHA-pinned. Ledger 4d: OIDC trusted-publisher only — no password.
+      # The `password:` key with PYPI_TOKEN is redundant and conflicts with OIDC auth.
       - name: Publish to PyPI (Trusted Publishers / OIDC)
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # release/v1
         with:
-          password: ${{ secrets.PYPI_TOKEN }}
           skip-existing: true

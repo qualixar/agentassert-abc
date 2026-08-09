@@ -20,10 +20,16 @@ Invalid regex patterns or type errors are caught and return False (SEC-06).
 
 from __future__ import annotations
 
+import concurrent.futures
 import re
 from typing import Any
 
 from agentassert_abc.models import ConstraintCheck  # noqa: TCH001
+
+# Ledger 4a: wall-clock limit for a single re.search call to prevent ReDoS.
+# Length caps alone (10K chars, 1K pattern) cannot stop exponential backtracking.
+# concurrent.futures gives us a portable OS-independent timeout.
+_RE_TIMEOUT_S: float = 1.0
 
 
 def evaluate_check(check: ConstraintCheck, state: dict[str, Any]) -> bool:
@@ -84,7 +90,14 @@ def evaluate_check(check: ConstraintCheck, state: dict[str, Any]) -> bool:
             # SEC-02: Guard against excessively long regex patterns
             if len(check.matches) > 1_000:
                 return False
-            return bool(re.search(check.matches, text))
+            # Ledger 4a: wall-clock timeout prevents exponential-backtracking ReDoS.
+            # Length caps alone are insufficient for hand-crafted catastrophic patterns.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+                _fut = _pool.submit(re.search, check.matches, text)
+                try:
+                    return bool(_fut.result(timeout=_RE_TIMEOUT_S))
+                except concurrent.futures.TimeoutError:
+                    return False
         except (re.error, TypeError):
             return False
     if check.between is not None:

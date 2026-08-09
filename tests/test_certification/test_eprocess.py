@@ -29,7 +29,6 @@ from agentassert_abc.certification.eprocess import (
     simulate_type1_crossing_rate,
 )
 
-
 # ── Configuration Validation ───────────────────────────────────────────────
 
 
@@ -366,7 +365,7 @@ class TestMixtureEProcess:
                     ep.update(y)
                 log_mix = ep.log_wealth
                 for k, (lw_k, pi_k) in enumerate(
-                    zip(ep.expert_log_wealths, ep.prior_weights)
+                    zip(ep.expert_log_wealths, ep.prior_weights, strict=False)
                 ):
                     assert log_mix >= lw_k + math.log(pi_k) - 1e-10, (
                         f"seq={seq}, k={k}: log_mix={log_mix:.4f} < "
@@ -383,7 +382,7 @@ class TestMixtureEProcess:
         lse = math.log(
             sum(
                 pi * math.exp(lw)
-                for pi, lw in zip(ep.prior_weights, ep.expert_log_wealths)
+                for pi, lw in zip(ep.prior_weights, ep.expert_log_wealths, strict=False)
             )
         )
         assert ep.log_wealth == pytest.approx(lse, abs=1e-9)

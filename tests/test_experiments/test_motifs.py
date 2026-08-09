@@ -22,7 +22,7 @@ Coverage targets (task-prompt requirements):
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -30,6 +30,9 @@ from agentassert_abc.exceptions import AgentAssertError
 from agentassert_abc.experiments.logging_schema import JsonlLogger
 from agentassert_abc.experiments.models import ModelResponse
 from agentassert_abc.experiments.tasks import TASK_LIBRARY
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # FakeClient — zero network calls, canned outputs keyed by model name
@@ -256,7 +259,7 @@ class TestSeries3:
         nids = motif.route
         outputs = {
             f"{nid}_m": (_CORRECT if ok else _WRONG)
-            for nid, ok in zip(nids, [a_ok, b_ok, c_ok])
+            for nid, ok in zip(nids, [a_ok, b_ok, c_ok], strict=False)
         }
         client = FakeClient(outputs)
         assignment = {nid: f"{nid}_m" for nid in nids}
@@ -303,7 +306,7 @@ class TestParallel2:
         branch_ids = motif.route[:-1]
         outputs = {
             f"{bid}_m": (_CORRECT if ok else _WRONG)
-            for bid, ok in zip(branch_ids, [branch_a_ok, branch_b_ok])
+            for bid, ok in zip(branch_ids, [branch_a_ok, branch_b_ok], strict=False)
         }
         client = FakeClient(outputs)
         assignment = {bid: f"{bid}_m" for bid in branch_ids}
@@ -374,7 +377,7 @@ class TestQuorum2of3:
         worker_ids = self._worker_ids()
         outputs = {
             f"{wid}_m": (_CORRECT if ok else _WRONG)
-            for wid, ok in zip(worker_ids, [w0_ok, w1_ok, w2_ok])
+            for wid, ok in zip(worker_ids, [w0_ok, w1_ok, w2_ok], strict=False)
         }
         client = FakeClient(outputs)
         assignment = {wid: f"{wid}_m" for wid in worker_ids}

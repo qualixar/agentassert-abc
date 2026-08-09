@@ -12,7 +12,6 @@ Gold scorers must be deterministic (no LLM) and objectively checkable.
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable
 
 import pytest
 
@@ -22,7 +21,6 @@ from agentassert_abc.experiments.tasks import (
     extract_answer,
     score,
 )
-
 
 # ---------------------------------------------------------------------------
 # Task dataclass contract

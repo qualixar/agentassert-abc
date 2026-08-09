@@ -322,7 +322,7 @@ print(f"Pipeline bound: {bound:.3f}")  # p_{A+B} >= 0.921
 | Compositional safety proofs | Yes | No | No | No |
 | Hard/Soft constraint separation | Yes | Partial | No | No |
 | Recovery re-prompting | Yes | Yes | Yes | No |
-| Framework integrations | 10 adapters | 3 | 1 (LangChain) | 2 |
+| Framework integrations | 6 adapters | 3 | 1 (LangChain) | 2 |
 | Statistical certification (SPRT) | Yes | No | No | No |
 | Benchmark suite | 293 scenarios | No | No | No |
 | Academic paper | [arXiv:2602.22302](https://arxiv.org/abs/2602.22302) | No | No | No |

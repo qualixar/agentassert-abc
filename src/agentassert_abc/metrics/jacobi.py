@@ -17,10 +17,12 @@ Patent reference: arXiv:2602.22302, LLD-D §D.0–D.5.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
+from scipy.stats import chi2
 
 from agentassert_abc.exceptions import AgentAssertError
 
@@ -250,18 +252,21 @@ def _lag1_autocorr(arr: np.ndarray) -> float:
 class GateResult:
     """Result of the Theorem D.4 identifiability gate (LLD-D §D.5).
 
-    Conditions CHECKED by this implementation (LLD-D §D.5):
+    Conditions CHECKED by this implementation (LLD-D §D.5 pass rule):
         1. Exploration (Eq. D.33): independent excursions at each boundary.
-        2. Bootstrap stability: >= 50% of bootstrap resamples produce
-           admissible fits.
-        3. Bootstrap classification separation (Eq. D.36): (1-alpha) percentile
-           CI for g_j lies strictly on one side of 0.
+        (pre) Bootstrap stability: >= 50% of resamples produce admissible fits.
+        4. Information (Eq. D.34): lambda_min(J_N/N) >= iota_star and
+           cond(J_N/N) <= k_star, where J_N^{-1} is estimated by the bootstrap
+           parameter covariance in zeta=(log kappa, logit theta, log sigma2).
+        5. Precision (Eq. D.35): C_{1-alpha} is bounded and
+           diam_zeta(C_{1-alpha}) <= r_star.
+        3. Classification separation (Eq. D.36): (1-alpha) percentile CI for
+           g_j lies strictly on one side of 0.
 
-    Conditions NOT checked (power-enhancement TODOs):
-        4. Information (Eq. D.34) — not implemented.
-        5. Diameter (Eq. D.35) — not implemented.
+    Because J_N is estimated from the moving-block bootstrap (LLD-D §D.5's
+    preferred finite-sample calibration), all coverage is ASYMPTOTIC.
 
-    gate_passed is True iff conditions 1–3 all pass.
+    gate_passed is True iff all four LLD-D §D.5 conditions pass.
 
     Attributes:
         params: Fitted JacobiParams from the base MoM fit, or None if the
@@ -295,6 +300,9 @@ class GateResult:
     g1_min: float
     g1_max: float
     reason: str
+    info_lambda_min: float = float("nan")
+    info_cond: float = float("nan")
+    region_diameter: float = float("nan")
 
 
 def identifiability_gate(
@@ -306,6 +314,9 @@ def identifiability_gate(
     eps: float = 0.1,
     m0: int = 1,
     m1: int = 1,
+    iota_star: float = 1e-10,
+    k_star: float = 1e6,
+    r_star: float = 10.0,
 ) -> GateResult:
     """Run the Theorem D.4 identifiability gate; refuse confinement when it fails.
 
@@ -321,9 +332,10 @@ def identifiability_gate(
            uses a 95% CI (wider → stricter); alpha=0.50 uses a 50% CI
            (narrower → more lenient).
 
-    Conditions NOT checked (power-enhancement TODOs, validity unaffected):
-        4. Information (Eq. D.34).
-        5. Diameter (Eq. D.35).
+    Also checked (LLD-D §D.5 conditions 4-5, bootstrap-calibrated):
+        4. Information (Eq. D.34): lambda_min(J_N/N) >= iota_star and
+           cond(J_N/N) <= k_star (J_N^{-1} ~ bootstrap covariance in zeta).
+        5. Precision (Eq. D.35): diam_zeta(C_{1-alpha}) <= r_star and bounded.
 
     If ANY checked condition fails, boundary_0_class and/or boundary_1_class
     are None and gate_passed is False.  No confinement claim may be made
@@ -341,6 +353,12 @@ def identifiability_gate(
         eps: Boundary band width for exploration check (Eq. D.33).
         m0: Minimum independent-excursion count for boundary 0.
         m1: Minimum independent-excursion count for boundary 1.
+        iota_star: Min-eigenvalue floor for J_N/N (Eq. D.34; default 1e-10 ~
+            positive-definiteness). Preregister for a real study.
+        k_star: Condition-number ceiling for J_N/N (Eq. D.34; default 1e6,
+            matching LLD-E §8.4 criterion 5).
+        r_star: Max (1-alpha) confidence-region diameter in zeta (Eq. D.35;
+            default 10.0 — wide; preregister tighter for a real study).
 
     Returns:
         GateResult with fitted params (or None), gate verdict, (1-alpha) CI
@@ -391,8 +409,8 @@ def identifiability_gate(
             ),
         )
 
-    # Gate condition 2: moving-block bootstrap stability
-    g0_samples, g1_samples = _bootstrap_g_values(arr, dt, n_bootstrap)
+    # Pre-check: moving-block bootstrap stability
+    g0_samples, g1_samples, zeta_samples = _bootstrap_samples(arr, dt, n_bootstrap)
 
     if len(g0_samples) < n_bootstrap // 2:
         return GateResult(
@@ -405,15 +423,63 @@ def identifiability_gate(
             g1_min=float("nan"),
             g1_max=float("nan"),
             reason=(
-                f"Bootstrap stability gate failed (condition 2): only "
+                f"Bootstrap stability gate failed: only "
                 f"{len(g0_samples)}/{n_bootstrap} moving-block resamples "
                 "produced admissible fits. "
                 "Confinement claim refused — fit is numerically unstable. "
-                "(Conditions NOT checked: information D.34, diameter D.35.)"
+                "(Refused before D.34 information / D.35 diameter checks.)"
             ),
         )
 
-    # Gate condition 3: (1-alpha) percentile CI lies strictly on one side of 0
+    # Gate conditions 4 & 5 — information (Eq. D.34) and precision/diameter
+    # (Eq. D.35), from the bootstrap parameter distribution in
+    # zeta = (log kappa, logit theta, log sigma2).  The bootstrap covariance is
+    # the finite-sample stand-in for J_N^{-1} (LLD-D §D.5 preferred calibration);
+    # coverage is therefore ASYMPTOTIC.
+    zeta = np.asarray(zeta_samples, dtype=float)
+    cov = np.cov(zeta, rowvar=False)
+    cov_evals = np.linalg.eigvalsh(cov)
+    lam_min_cov = float(cov_evals[0])
+    lam_max_cov = float(cov_evals[-1])
+    n_trans = max(1, len(arr) - 1)
+    if lam_min_cov <= 0.0 or not np.isfinite(lam_max_cov):
+        info_lambda_min = 0.0
+        info_cond = float("inf")
+        region_diameter = float("inf")
+    else:
+        info_lambda_min = 1.0 / (n_trans * lam_max_cov)  # lambda_min(J_N/N)
+        info_cond = lam_max_cov / lam_min_cov            # cond(J_N/N) = cond(cov)
+        c_1a = float(chi2.ppf(1.0 - alpha, df=3))
+        region_diameter = 2.0 * math.sqrt(c_1a * lam_max_cov)
+
+    info_ok = info_lambda_min >= iota_star and info_cond <= k_star
+    diam_ok = math.isfinite(region_diameter) and region_diameter <= r_star
+    diag = (
+        f"[info lambda_min(J/N)={info_lambda_min:.2e} (>= {iota_star:.0e}), "
+        f"cond={info_cond:.1f} (<= {k_star:.0e}); "
+        f"diam_zeta={region_diameter:.3f} (<= {r_star})]"
+    )
+    if not info_ok or not diam_ok:
+        return GateResult(
+            params=params,
+            gate_passed=False,
+            boundary_0_class=None,
+            boundary_1_class=None,
+            g0_min=float("nan"),
+            g0_max=float("nan"),
+            g1_min=float("nan"),
+            g1_max=float("nan"),
+            info_lambda_min=info_lambda_min,
+            info_cond=info_cond,
+            region_diameter=region_diameter,
+            reason=(
+                "Information/precision gate failed (conditions 4-5, "
+                f"Eqs. D.34-D.35): {diag}. Confinement claim refused — the fit "
+                "is under-identified or its confidence region is too wide."
+            ),
+        )
+
+    # Gate condition 3 (Eq. D.36): (1-alpha) percentile CI strictly one side of 0
     g0_arr = np.array(g0_samples)
     g1_arr = np.array(g1_samples)
     lo_pct = 100.0 * (alpha / 2.0)
@@ -425,11 +491,7 @@ def identifiability_gate(
 
     b0_sep = (g0_lo > 0.0) or (g0_hi < 0.0)
     b1_sep = (g1_lo > 0.0) or (g1_hi < 0.0)
-
     ci_pct = int(round(100.0 * (1.0 - alpha)))
-    not_checked_note = (
-        "(Conditions NOT checked: information D.34, diameter D.35.)"
-    )
 
     if not b0_sep or not b1_sep:
         b0_cls: str | None = _class_from_range(g0_lo, g0_hi) if b0_sep else None
@@ -443,13 +505,16 @@ def identifiability_gate(
             g0_max=g0_hi,
             g1_min=g1_lo,
             g1_max=g1_hi,
+            info_lambda_min=info_lambda_min,
+            info_cond=info_cond,
+            region_diameter=region_diameter,
             reason=(
                 f"Classification separation gate failed (condition 3, Eq. D.36, "
                 f"{ci_pct}% CI): bootstrap CI straddles the Feller threshold for "
                 + _straddled_boundaries(b0_sep, b1_sep)
                 + f". g0 CI [{g0_lo:.3f}, {g0_hi:.3f}], "
                 f"g1 CI [{g1_lo:.3f}, {g1_hi:.3f}]. "
-                "Confinement claim refused. " + not_checked_note
+                f"Confinement claim refused. {diag}"
             ),
         )
 
@@ -464,13 +529,16 @@ def identifiability_gate(
         g0_max=g0_hi,
         g1_min=g1_lo,
         g1_max=g1_hi,
+        info_lambda_min=info_lambda_min,
+        info_cond=info_cond,
+        region_diameter=region_diameter,
         reason=(
-            f"Gate passed (conditions checked: exploration D.33, bootstrap "
-            f"stability, classification separation D.36 at {ci_pct}% CI). "
+            "Gate PASSED — all four LLD-D §D.5 conditions hold: exploration "
+            f"(D.33), information (D.34), diameter (D.35), classification "
+            f"separation (D.36) at {ci_pct}% CI. "
             f"Boundary 0: {b0_class}. Boundary 1: {b1_class}. "
-            f"Bootstrap g0 CI [{g0_lo:.3f}, {g0_hi:.3f}], "
-            f"g1 CI [{g1_lo:.3f}, {g1_hi:.3f}]. "
-            + not_checked_note
+            f"g0 CI [{g0_lo:.3f}, {g0_hi:.3f}], g1 CI [{g1_lo:.3f}, {g1_hi:.3f}]. "
+            f"{diag} (coverage asymptotic — bootstrap-calibrated)."
         ),
     )
 
@@ -532,17 +600,19 @@ def _moving_block_resample(
     return resample[:n]
 
 
-def _bootstrap_g_values(
+def _bootstrap_samples(
     arr: np.ndarray,
     dt: float,
     n_bootstrap: int,
-) -> tuple[list[float], list[float]]:
-    """Compute moving-block bootstrap distribution of g0 and g1.
+) -> tuple[list[float], list[float], list[list[float]]]:
+    """Moving-block bootstrap of g0, g1, and zeta=(log k, logit theta, log s2).
 
     Block length is derived from the lag-1 ACF to preserve the Markov
     dependence structure — i.i.d. index resampling is NOT used (it would
     destroy autocorrelation, causing systematic under-coverage for the
-    Feller boundary classification test).
+    Feller boundary classification test).  The zeta samples are the basis for
+    the D.34 information and D.35 diameter checks: their covariance is the
+    finite-sample stand-in for J_N^{-1} (LLD-D §D.5).
 
     Args:
         arr: Observed series.
@@ -550,7 +620,8 @@ def _bootstrap_g_values(
         n_bootstrap: Number of resamples.
 
     Returns:
-        Tuple of (g0_samples, g1_samples) from successful bootstrap fits.
+        (g0_samples, g1_samples, zeta_samples) from successful bootstrap fits,
+        where zeta_samples[i] = [log(kappa), logit(theta), log(sigma2)].
     """
     rng = np.random.default_rng(20260725)  # fixed seed for reproducibility
     n = len(arr)
@@ -568,17 +639,25 @@ def _bootstrap_g_values(
 
     g0_samples: list[float] = []
     g1_samples: list[float] = []
+    zeta_samples: list[list[float]] = []
 
     for _ in range(n_bootstrap):
         resample = _moving_block_resample(arr, block_len, rng)
         try:
             bp = fit_jacobi_mom(resample, dt)
-            g0_samples.append(2.0 * bp.kappa * bp.theta - bp.sigma2)
-            g1_samples.append(2.0 * bp.kappa * (1.0 - bp.theta) - bp.sigma2)
         except JacobiFitError:
-            pass  # inadmissible resample — skip, count failure implicitly
+            continue  # inadmissible resample — skip, count failure implicitly
+        g0_samples.append(2.0 * bp.kappa * bp.theta - bp.sigma2)
+        g1_samples.append(2.0 * bp.kappa * (1.0 - bp.theta) - bp.sigma2)
+        zeta_samples.append(
+            [
+                math.log(bp.kappa),
+                math.log(bp.theta / (1.0 - bp.theta)),
+                math.log(bp.sigma2),
+            ]
+        )
 
-    return g0_samples, g1_samples
+    return g0_samples, g1_samples, zeta_samples
 
 
 def _class_from_range(g_min: float, g_max: float) -> str:

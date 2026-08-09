@@ -84,18 +84,25 @@ def kl_bernoulli(p: float, q: float) -> float:
 
     Args:
         p: True probability in [0, 1].
-        q: Reference probability in (0, 1).
+        q: Reference probability in [0, 1]; a boundary q returns +inf when p
+            has mass on the opposite side (the KL limit), rather than raising.
 
     Returns:
-        Non-negative KL divergence value.
+        Non-negative KL divergence value (possibly +inf at a boundary q).
 
     References:
         LLD-C Eq (5.22).
     """
+    # d(p||q) is +inf when q sits on a boundary that p has mass away from
+    # (e.g. d(0.5||0) = +inf); q in (0,1) takes the usual finite value.
     result = 0.0
     if p > 0.0:
+        if q <= 0.0:
+            return math.inf
         result += p * math.log(p / q)
     if p < 1.0:
+        if q >= 1.0:
+            return math.inf
         result += (1.0 - p) * math.log((1.0 - p) / (1.0 - q))
     return result
 
@@ -404,7 +411,12 @@ class GraphEProcess:
         """Process one fully-adjudicated mission outcome — LLD-C §8.3.
 
         Args:
-            y: Terminal graph label Y_{G,r} in {0, 1}.
+            y: Terminal graph label Y_{G,r} in {0, 1}. This MUST be the output
+                of ``compute_y_graph`` (the route-consistent joint hard∧soft
+                label), NOT a raw component / hard-only / soft-only indicator.
+                The e-process consumes a bare bit and cannot detect provenance;
+                passing H_{G,r} or S_{G,r} produces a valid-looking but WRONG
+                certificate (LLD-A §6; impl-vs-LLD CRIT).
 
         Returns:
             Immutable EProcessUpdate snapshot after this evidence index.
@@ -441,7 +453,8 @@ class GraphEProcess:
 
     def _update_fixed(self, y: int) -> None:
         """Update log wealth for fixed-lambda mode — LLD-C Eq (3.2)."""
-        assert self._fixed_lam is not None
+        if self._fixed_lam is None:
+            raise EProcessError("internal invariant: fixed_lam unset in fixed mode")
         self._log_wealth += _log_factor_fixed(self._fixed_lam, self._p0, y)
 
     def _get_expert_q(self, k: int) -> float:
@@ -456,7 +469,8 @@ class GraphEProcess:
         the current update step).
         """
         eps = self._epsilon
-        assert eps is not None
+        if eps is None:
+            raise EProcessError("internal invariant: epsilon unset in mixture mode")
         if k == 0:
             # Cash expert: constant at p0, lambda=0 — LLD-C Eq (5.5)
             return self._p0
@@ -466,7 +480,8 @@ class GraphEProcess:
             return _clip(raw, self._p0, eps)
         # Fixed-forecast expert
         q_val = self._expert_qs[k]
-        assert q_val is not None
+        if q_val is None:
+            raise EProcessError(f"internal invariant: expert {k} forecast unset")
         return q_val
 
     def _update_mixture(self, y: int) -> None:
@@ -482,7 +497,8 @@ class GraphEProcess:
         """
         p0 = self._p0
         eps = self._epsilon
-        assert eps is not None
+        if eps is None:
+            raise EProcessError("internal invariant: epsilon unset in mixture mode")
         k_count = len(self._expert_qs)
 
         # Step 1: Predictable forecasts from F_{r-1} (before observing y)

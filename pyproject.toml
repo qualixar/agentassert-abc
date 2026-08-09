@@ -50,7 +50,7 @@ yaml = [
 math = [
     "scipy>=1.14",
     "numpy>=2.0",
-    "simpleeval>=1.0",
+    "simpleeval>=1.0,<2",  # Ledger 4c: cap below v2 (breaking API change)
 ]
 llm = ["litellm>=1.50"]
 otel = ["opentelemetry-api>=1.28"]

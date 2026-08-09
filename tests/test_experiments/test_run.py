@@ -47,7 +47,6 @@ from agentassert_abc.experiments.logging_schema import JsonlLogger
 from agentassert_abc.experiments.models import ModelResponse
 from agentassert_abc.experiments.motifs import MOTIF_LIBRARY
 
-
 # ---------------------------------------------------------------------------
 # Helpers — deferred import guard
 # ---------------------------------------------------------------------------
