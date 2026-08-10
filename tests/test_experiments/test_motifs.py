@@ -75,10 +75,11 @@ class FakeClient:
 
 
 class TestMotifLibrary:
-    def test_library_has_five_entries(self) -> None:
+    def test_library_has_six_entries(self) -> None:
+        # 5 preregistered + quorum3of4 (exploratory m>=4 over-identification arm)
         from agentassert_abc.experiments.motifs import MOTIF_LIBRARY
 
-        assert len(MOTIF_LIBRARY) == 5
+        assert len(MOTIF_LIBRARY) == 6
 
     def test_library_has_expected_keys(self) -> None:
         from agentassert_abc.experiments.motifs import MOTIF_LIBRARY
@@ -88,8 +89,16 @@ class TestMotifLibrary:
             "series3",
             "parallel2",
             "quorum2of3",
+            "quorum3of4",
             "hierarchy",
         }
+
+    def test_quorum3of4_threshold_and_workers(self) -> None:
+        from agentassert_abc.experiments.motifs import MOTIF_LIBRARY
+
+        m = MOTIF_LIBRARY["quorum3of4"]
+        assert m.quorum_threshold == 3
+        assert sum(1 for n in m.nodes if n.startswith("worker")) == 4
 
     def test_motif_is_frozen(self) -> None:
         from agentassert_abc.experiments.motifs import MOTIF_LIBRARY

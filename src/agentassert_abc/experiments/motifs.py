@@ -189,6 +189,22 @@ MOTIF_LIBRARY: Final[dict[str, Motif]] = {
         route=("worker_0", "worker_1", "worker_2", "aggregator"),
         quorum_threshold=2,
     ),
+    # EXPLORATORY (not in the preregistered confirmatory set) — added post-hoc
+    # for the m≥4 over-identification arm (LLD-B audit F1/Q5). Four independent
+    # workers on the same missions give a 4×4 co-failure matrix, the smallest m
+    # at which the one-factor structure is over-identified (testable).
+    "quorum3of4": Motif(
+        name="quorum3of4",
+        nodes=("worker_0", "worker_1", "worker_2", "worker_3", "aggregator"),
+        edges=(
+            ("worker_0", "aggregator"),
+            ("worker_1", "aggregator"),
+            ("worker_2", "aggregator"),
+            ("worker_3", "aggregator"),
+        ),
+        route=("worker_0", "worker_1", "worker_2", "worker_3", "aggregator"),
+        quorum_threshold=3,
+    ),
     "hierarchy": Motif(
         name="hierarchy",
         nodes=("supervisor", "worker_0", "worker_1", "verifier"),
@@ -614,7 +630,7 @@ def run_mission(
         route, comps, handoffs, tokens, cost = _run_series(
             motif, task, model_assignment, client
         )
-    elif motif.name in ("parallel2", "quorum2of3"):
+    elif motif.name in ("parallel2", "quorum2of3", "quorum3of4"):
         route, comps, handoffs, tokens, cost = _run_parallel_quorum(
             motif, task, model_assignment, client
         )
