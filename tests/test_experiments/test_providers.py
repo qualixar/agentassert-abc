@@ -329,9 +329,15 @@ class TestHappyPath:
             client.generate(config.META_CONTRIBUTOR_MODEL, "test")
 
         body = captured_bodies[0]
-        assert body["max_tokens"] == config.FRONTIER_MAX_OUTPUT_TOKENS
+        # Meta uses the OpenAI Responses shape: input + max_output_tokens +
+        # reasoning.effort, NOT messages + max_tokens.
+        assert body["max_output_tokens"] == config.FRONTIER_MAX_OUTPUT_TOKENS
+        assert body["input"] == "test"
         assert body["temperature"] == pytest.approx(0.2)
         assert body["top_p"] == pytest.approx(1.0)
+        assert body["reasoning"] == {"effort": config.META_REASONING_EFFORT}
+        assert "max_tokens" not in body
+        assert "messages" not in body
 
     def test_openrouter_cost_usd_correct(self) -> None:
         """Cost = (in/1e6)*in_price + (out/1e6)*out_price using PROVIDER_PRICES."""
@@ -350,7 +356,8 @@ class TestHappyPath:
                 "qwen/qwen3-7b-fast", "test"
             )
 
-        in_price, out_price = config.PROVIDER_PRICES["openrouter_qwen_flash"]
+        # No usage.cost in the mock payload → cost falls back to the table.
+        in_price, out_price = config.PROVIDER_PRICES["openrouter_default"]
         expected = in_tok / 1e6 * in_price + out_tok / 1e6 * out_price
         assert resp.cost_usd == pytest.approx(expected)
 
@@ -673,3 +680,101 @@ class TestRetryExhausted:
         assert call_count == 1, (
             f"Content failures (KeyError) must NOT be retried. Got {call_count} calls."
         )
+
+
+# ---------------------------------------------------------------------------
+# TestResponsesShapeAndCost — Meta Responses parsing, reasoning-model guards,
+# and OpenRouter authoritative usage.cost.
+# ---------------------------------------------------------------------------
+
+
+def _responses_payload(
+    text: str = "6912",
+    input_tokens: int = 27,
+    output_tokens: int = 90,
+) -> dict:
+    """Meta /v1/responses shape: a reasoning item (no content) then a message."""
+    return {
+        "status": "completed",
+        "model": "muse-spark-1.2-contributor",
+        "output": [
+            {"type": "reasoning", "summary": [], "status": "completed"},
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": text}],
+                "status": "completed",
+            },
+        ],
+        "usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "output_tokens_details": {"reasoning_tokens": output_tokens - 4},
+        },
+    }
+
+
+class TestResponsesShapeAndCost:
+    """Responses-API parsing, reasoning-model guards, authoritative cost."""
+
+    def test_metaspark_parses_responses_output_text(self) -> None:
+        p = _import_providers()
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"MODEL_API_KEY": "k"}),
+        ):
+            resp = p.MetaSparkClient(
+                transport=lambda url, body: _responses_payload("6912")  # noqa: ARG005
+            ).generate(config.META_CONTRIBUTOR_MODEL, "1234+5678?")
+        assert resp.text == "6912"
+        assert resp.input_tokens == 27
+        assert resp.output_tokens == 90
+
+    def test_metaspark_empty_output_raises(self) -> None:
+        """Truncated reasoning model (empty output[]) must raise, not silently pass."""
+        p = _import_providers()
+        payload = {"status": "incomplete", "output": [], "usage": {"output_tokens": 160}}
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"MODEL_API_KEY": "k"}),
+            pytest.raises(KeyError),
+        ):
+            p.MetaSparkClient(
+                transport=lambda url, body: payload  # noqa: ARG005
+            ).generate(config.META_CONTRIBUTOR_MODEL, "x")
+
+    def test_openrouter_prefers_reported_usage_cost(self) -> None:
+        """When the payload reports usage.cost (OpenRouter), use it verbatim."""
+        p = _import_providers()
+        payload = _chat_completions_payload(input_tokens=200, output_tokens=80)
+        payload["usage"]["cost"] = 0.00042  # authoritative, != table computation
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}),
+        ):
+            resp = p.OpenRouterClient(
+                transport=lambda url, body: payload  # noqa: ARG005
+            ).generate(config.OPENROUTER_DEFAULT_MODEL, "test")
+        assert resp.cost_usd == pytest.approx(0.00042)
+
+    def test_openrouter_null_content_raises_not_none_string(self) -> None:
+        """A reasoning model returning content=null must raise, never emit 'None'."""
+        p = _import_providers()
+        payload = {
+            "choices": [
+                {
+                    "message": {"content": None, "reasoning": "..."},
+                    "finish_reason": "length",
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 160},
+            "model": "some/reasoning-model",
+        }
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": "k"}),
+            pytest.raises(KeyError),
+        ):
+            p.OpenRouterClient(
+                transport=lambda url, body: payload  # noqa: ARG005
+            ).generate(config.OPENROUTER_DEFAULT_MODEL, "test")

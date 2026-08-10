@@ -365,23 +365,23 @@ class TestDryRunBaselineBudget:
 class TestConfigFrontierConstants:
     """New frontier model roster constants in config.py are present."""
 
-    def test_openrouter_qwen_same_vendor_exists(self) -> None:
-        assert hasattr(config, "OPENROUTER_QWEN_SAME_VENDOR"), (
-            "config.OPENROUTER_QWEN_SAME_VENDOR missing"
+    def test_openrouter_same_vendor_model_exists(self) -> None:
+        assert hasattr(config, "OPENROUTER_SAME_VENDOR_MODEL"), (
+            "config.OPENROUTER_SAME_VENDOR_MODEL missing"
         )
 
-    def test_openrouter_qwen_same_vendor_non_empty(self) -> None:
-        assert isinstance(config.OPENROUTER_QWEN_SAME_VENDOR, str)
-        assert config.OPENROUTER_QWEN_SAME_VENDOR.strip()
+    def test_openrouter_same_vendor_model_non_empty(self) -> None:
+        assert isinstance(config.OPENROUTER_SAME_VENDOR_MODEL, str)
+        assert config.OPENROUTER_SAME_VENDOR_MODEL.strip()
 
-    def test_openrouter_gemma_diff_vendor_exists(self) -> None:
-        assert hasattr(config, "OPENROUTER_GEMMA_DIFF_VENDOR"), (
-            "config.OPENROUTER_GEMMA_DIFF_VENDOR missing"
+    def test_openrouter_diff_vendor_model_exists(self) -> None:
+        assert hasattr(config, "OPENROUTER_DIFF_VENDOR_MODEL"), (
+            "config.OPENROUTER_DIFF_VENDOR_MODEL missing"
         )
 
-    def test_openrouter_gemma_diff_vendor_non_empty(self) -> None:
-        assert isinstance(config.OPENROUTER_GEMMA_DIFF_VENDOR, str)
-        assert config.OPENROUTER_GEMMA_DIFF_VENDOR.strip()
+    def test_openrouter_diff_vendor_model_non_empty(self) -> None:
+        assert isinstance(config.OPENROUTER_DIFF_VENDOR_MODEL, str)
+        assert config.OPENROUTER_DIFF_VENDOR_MODEL.strip()
 
     def test_grok_model_exists(self) -> None:
         assert hasattr(config, "GROK_MODEL"), (
@@ -392,9 +392,11 @@ class TestConfigFrontierConstants:
         assert isinstance(config.GROK_MODEL, str)
         assert config.GROK_MODEL.strip()
 
-    def test_openrouter_default_model_unchanged(self) -> None:
-        """Existing OPENROUTER_DEFAULT_MODEL must not be changed."""
-        assert config.OPENROUTER_DEFAULT_MODEL == "qwen/qwen3-7b-fast"
+    def test_openrouter_default_model_is_locked_anchor(self) -> None:
+        """Anchor is the verified NON-reasoning Mistral model (locked pre-run)."""
+        assert (
+            config.OPENROUTER_DEFAULT_MODEL == "mistralai/mistral-small-24b-instruct-2501"
+        )
 
     def test_frontier_enabled_still_false(self) -> None:
         """Adding roster constants must not flip FRONTIER_ENABLED."""

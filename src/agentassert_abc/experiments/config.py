@@ -37,11 +37,22 @@ OLLAMA_URL: Final[str] = "http://localhost:11434"
 LOCAL_MODELS: Final[tuple[str, ...]] = ("qwen2.5:7b", "gemma3:4b", "llama3.2")
 
 # --- Provider adapter configuration (LLD-E §4.1, Task #20) ------------------
-# Meta Contributor API model identifier.
-META_CONTRIBUTOR_MODEL: Final[str] = "meta-llama/llama-4-scout-17b-16e-instruct"
+# Meta Contributor API model identifier (Meta Model API /v1/responses).
+# The Spark family are reasoning models; META_REASONING_EFFORT below keeps them
+# inside the FRONTIER_MAX_OUTPUT_TOKENS cap.
+META_CONTRIBUTOR_MODEL: Final[str] = "muse-spark-1.2-contributor"
 
-# Default model offered through OpenRouter for the Qwen3.7-Flash price tier.
-OPENROUTER_DEFAULT_MODEL: Final[str] = "qwen/qwen3-7b-fast"
+# Reasoning effort for Meta Spark (OpenAI Responses `reasoning.effort`).
+# "minimal" completes a short answer in ~85 reasoning tokens (verified), so the
+# visible answer fits within FRONTIER_MAX_OUTPUT_TOKENS=160.  "low"/"medium"/
+# "high" overrun the cap; "none" is rejected by the model.  Part of frozen
+# sampling (LLD-E §5.1) — record in the preregistration.
+META_REASONING_EFFORT: Final[str] = "minimal"
+
+# Anchor model offered through OpenRouter — robust, cheap, NON-reasoning
+# instruct model.  Verified correct on capability probes; a reasoning model
+# here returns null content under the 160-token cap (rejected loudly).
+OPENROUTER_DEFAULT_MODEL: Final[str] = "mistralai/mistral-small-24b-instruct-2501"
 
 # GrokBridgeClient local hermes proxy base URL.  Override via env var
 # GROK_PROXY_BASE_URL before constructing the adapter.
@@ -51,9 +62,12 @@ GROK_PROXY_BASE_URL: Final[str] = "http://localhost:8787/v1"
 # Used by provider adapters in providers.py to compute cost_usd per response.
 # LLD-E §6.2 admission ceilings still apply; any model priced above those
 # ceilings must not be admitted.
-#   meta_contributor      : Meta Contributor API   — $0.10 / $0.20 per 1M tokens
-#   openrouter_qwen_flash : OpenRouter Qwen3.7-F   — $0.03 / $0.13 per 1M tokens
-#   grok_bridge           : local subscription-backed proxy — $0.00 / $0.00
+#   meta_contributor   : Meta Contributor API — $0.10 / $0.20 per 1M tokens
+#   openrouter_default : OpenRouter fallback   — $0.05 / $0.15 per 1M tokens
+#                        (conservative UPPER bound across the OpenRouter roster;
+#                        the authoritative per-call cost is OpenRouter's own
+#                        usage.cost field when present — see providers.py)
+#   grok_bridge        : local subscription-backed proxy — $0.00 / $0.00
 #
 # To wire the §6.3 batch gate when using a frontier adapter with
 # _execute_mission_batch (run.py), pass:
@@ -62,7 +76,7 @@ GROK_PROXY_BASE_URL: Final[str] = "http://localhost:8787/v1"
 # False by default, frontier adapters are inert until explicitly enabled.
 PROVIDER_PRICES: Final[dict[str, tuple[float, float]]] = {
     "meta_contributor": (0.10, 0.20),
-    "openrouter_qwen_flash": (0.03, 0.13),
+    "openrouter_default": (0.05, 0.15),
     "grok_bridge": (0.0, 0.0),
 }
 
@@ -76,15 +90,20 @@ FRONTIER_N_PER_CONDITION: Final[int] = 120
 # --- Frontier model roster constants (LLD-E §4.1, Task #20 extension) --------
 # Locked before the first confirmatory run; substitution only via a dated
 # preregistration amendment BEFORE any confirmatory outcome is generated.
+# All IDs verified present on OpenRouter and NON-reasoning (clean content under
+# the 160-token output cap).  The roster is a nested design anchored on
+# OPENROUTER_DEFAULT_MODEL (mistral-small-24b): each condition flips exactly one
+# factor — same model, then same vendor / different model, then different vendor.
 #
-# same_vendor pair: two Alibaba Qwen models via OpenRouter (different sizes,
-#   same family / vendor / runtime).
-OPENROUTER_QWEN_SAME_VENDOR: Final[str] = "qwen/qwen2.5-3b-instruct"
+# same_vendor pair member: a smaller Mistral model (same vendor as the anchor,
+#   different size / checkpoint).  Verified correct on capability probes.
+OPENROUTER_SAME_VENDOR_MODEL: Final[str] = "mistralai/ministral-8b-2512"
 #
-# different_vendor pair: Gemma 3 1B (Google) via OpenRouter — minimal cost
-#   within the LLD-E §6.2 admission ceiling.
-OPENROUTER_GEMMA_DIFF_VENDOR: Final[str] = "google/gemma-3-1b-it"
+# different_vendor pair member: Gemma 3 12B (Google) via OpenRouter — different
+#   vendor from the Mistral anchor, cheap, within the LLD-E §6.2 ceiling.
+#   Verified correct on capability probes.
+OPENROUTER_DIFF_VENDOR_MODEL: Final[str] = "google/gemma-3-12b-it"
 #
 # Grok model ID for the GrokBridgeClient breadth arm (local hermes proxy,
 #   subscription-backed, $0 per-call).
-GROK_MODEL: Final[str] = "grok-3-mini"
+GROK_MODEL: Final[str] = "grok-4.5"

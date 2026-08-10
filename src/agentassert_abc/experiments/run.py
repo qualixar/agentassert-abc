@@ -210,14 +210,16 @@ _LOCAL_MODEL_PAIRS: dict[str, tuple[str, str]] = {
 # any substitution requires a dated preregistration amendment BEFORE outcomes
 # are visible.
 #
+# Nested design anchored on OPENROUTER_DEFAULT_MODEL (mistral-small-24b); each
+# condition flips exactly one factor.
 # Primary conditions (all through OpenRouterClient):
-#   same_model:       Qwen3-7B-Fast × Qwen3-7B-Fast (maximal shared config)
-#   same_vendor:      Qwen3-7B-Fast × Qwen2.5-3B (same Alibaba family, diff size)
-#   different_vendor: Qwen3-7B-Fast × Gemma-3-1B (cross-vendor, Google vs Alibaba)
+#   same_model:       mistral-small-24b × mistral-small-24b (maximal shared config)
+#   same_vendor:      mistral-small-24b × ministral-8b (same vendor Mistral, diff size)
+#   different_vendor: mistral-small-24b × gemma-3-12b-it (cross-vendor, Mistral vs Google)
 #
-# Breadth arms for different_vendor replication:
-#   different_vendor_meta: MetaSparkClient (Meta Llama) × OpenRouter Qwen
-#   different_vendor_grok: GrokBridgeClient (Grok, subscription) × OpenRouter Qwen
+# Breadth arms for different_vendor replication (use the other two backends):
+#   different_vendor_meta: MetaSparkClient (Spark, reasoning) × OpenRouter anchor
+#   different_vendor_grok: GrokBridgeClient (Grok, subscription) × OpenRouter anchor
 #
 # SAFETY: reading this constant never constructs an adapter.  Adapters are
 # built only by build_client(..., "frontier") and require FRONTIER_ENABLED=True.
@@ -229,11 +231,11 @@ _FRONTIER_MODEL_PAIRS: dict[str, tuple[str, str]] = {
     ),
     "same_vendor": (
         config.OPENROUTER_DEFAULT_MODEL,
-        config.OPENROUTER_QWEN_SAME_VENDOR,
+        config.OPENROUTER_SAME_VENDOR_MODEL,
     ),
     "different_vendor": (
         config.OPENROUTER_DEFAULT_MODEL,
-        config.OPENROUTER_GEMMA_DIFF_VENDOR,
+        config.OPENROUTER_DIFF_VENDOR_MODEL,
     ),
     # Breadth arms — additional different-vendor replication (LLD-E §4.1)
     "different_vendor_meta": (

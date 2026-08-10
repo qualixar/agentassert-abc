@@ -17,8 +17,9 @@ Adapters
     API key: env var ``OPENROUTER_API_KEY``.
 
 :class:`MetaSparkClient`
-    Meta Contributor API — ``https://api.meta.ai/v1/responses``.
-    Assumes OpenAI chat/completions response format (OpenAI-compatible endpoint).
+    Meta Contributor API — ``https://api.meta.ai/v1/responses`` (OpenAI
+    Responses API shape).  Spark is a reasoning model; the request sets
+    ``reasoning.effort`` from :data:`~config.META_REASONING_EFFORT`.
     API key: env var ``MODEL_API_KEY``.
 
 :class:`GrokBridgeClient`
@@ -103,6 +104,12 @@ _CHARS_PER_TOKEN: Final[int] = 4
 
 _DEFAULT_TIMEOUT_SECONDS: Final[int] = 30
 
+# Token caps (LLD-E §6.2) are a cost guard, requested from the provider. Small
+# overruns are accepted (real cost is tracked and the $19.50 batch stop is
+# authoritative); only a GROSS overrun (> x this multiple) is discarded, which
+# signals the request cap was ignored entirely (runaway-cost protection).
+_CAP_HARD_MULT: Final[int] = 4
+
 # Matches "HTTP 429 ..." and "HTTP 5xx ..." in RuntimeError messages emitted
 # by the stdlib urllib transport.
 _RETRYABLE_RE: Final[re.Pattern[str]] = re.compile(r"\bHTTP (429|5\d{2})\b")
@@ -143,6 +150,50 @@ def _is_retryable(exc: Exception) -> bool:
     if isinstance(exc, RuntimeError):
         return bool(_RETRYABLE_RE.search(str(exc)))
     return False
+
+
+def _extract_responses_text(raw: dict) -> str:
+    """Extract text from an OpenAI Responses API payload (Meta ``/v1/responses``).
+
+    Handles the convenience ``output_text`` field and the canonical
+    ``output[].content[].text`` structure; falls back to chat/completions shape.
+    """
+    if isinstance(raw.get("output_text"), str):
+        return raw["output_text"]
+    parts: list[str] = []
+    for item in raw.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        for part in item.get("content") or []:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                parts.append(part["text"])
+    if parts:
+        return "".join(parts)
+    try:
+        return _extract_chat_text(raw)
+    except (KeyError, IndexError, TypeError) as exc:
+        raise KeyError("no text found in Responses payload") from exc
+
+
+def _extract_chat_text(raw: dict) -> str:
+    """Extract assistant text from an OpenAI chat/completions payload.
+
+    Fails LOUD (never returns the string ``"None"``) when ``content`` is null —
+    that happens when a *reasoning* model exhausts ``max_tokens`` on hidden
+    reasoning before emitting any visible content, or on a refusal.  Silently
+    returning ``"None"`` would pollute the experiment data (LLD-E), so we raise.
+    Use a non-reasoning model for chat-style adapters.
+    """
+    message = raw["choices"][0]["message"]
+    content = message.get("content")
+    if content is None or content == "":
+        finish = raw["choices"][0].get("finish_reason")
+        raise KeyError(
+            "chat/completions response has empty content "
+            f"(finish_reason={finish!r}); this is typically a reasoning model "
+            "truncated by max_tokens or a refusal — use a non-reasoning model"
+        )
+    return str(content)
 
 
 def _make_http_transport(
@@ -212,7 +263,7 @@ class _OpenAICompatBase:
     between construction and the first call).
     """
 
-    __slots__ = ("_endpoint", "_price_key", "_transport")
+    __slots__ = ("_api_style", "_endpoint", "_price_key", "_transport")
 
     def __init__(
         self,
@@ -221,6 +272,7 @@ class _OpenAICompatBase:
         env_key_name: str | None,
         price_key: str,
         transport: Transport | None,
+        api_style: str = "chat",
     ) -> None:
         """Validate the frontier gate and initialise the adapter.
 
@@ -260,6 +312,7 @@ class _OpenAICompatBase:
 
         self._endpoint: str = endpoint
         self._price_key: str = price_key
+        self._api_style: str = api_style
 
         # --- Transport selection --------------------------------------------
         # Tests inject a mock transport (in-process, zero sockets).
@@ -304,13 +357,28 @@ class _OpenAICompatBase:
         max_chars: int = config.FRONTIER_MAX_INPUT_TOKENS * _CHARS_PER_TOKEN
         safe_prompt: str = prompt[:max_chars]
 
-        body: dict = {
-            "model": model,
-            "messages": [{"role": "user", "content": safe_prompt}],
-            "max_tokens": config.FRONTIER_MAX_OUTPUT_TOKENS,  # LLD-E §5.1
-            "temperature": 0.2,                               # LLD-E §5.1
-            "top_p": 1.0,                                     # LLD-E §5.1
-        }
+        if self._api_style == "responses":
+            # OpenAI Responses API (Meta /v1/responses): `input` +
+            # `max_output_tokens`, NOT `messages` + `max_tokens`.  The Spark
+            # models are reasoning models; `reasoning.effort="minimal"` keeps
+            # the hidden reasoning small enough that the visible answer fits
+            # inside FRONTIER_MAX_OUTPUT_TOKENS (LLD-E §5.1 frozen sampling).
+            body: dict = {
+                "model": model,
+                "input": safe_prompt,
+                "max_output_tokens": config.FRONTIER_MAX_OUTPUT_TOKENS,
+                "temperature": 0.2,
+                "top_p": 1.0,
+                "reasoning": {"effort": config.META_REASONING_EFFORT},
+            }
+        else:
+            body = {
+                "model": model,
+                "messages": [{"role": "user", "content": safe_prompt}],
+                "max_tokens": config.FRONTIER_MAX_OUTPUT_TOKENS,  # LLD-E §5.1
+                "temperature": 0.2,                               # LLD-E §5.1
+                "top_p": 1.0,                                     # LLD-E §5.1
+            }
 
         raw = self._call_with_one_retry(body)
         return self._parse_response(raw, model)
@@ -375,34 +443,48 @@ class _OpenAICompatBase:
         else:
             output_tokens = 0
 
-        # --- Token cap enforcement (LLD-E §6.2) ----------------------------
-        if input_tokens > config.FRONTIER_MAX_INPUT_TOKENS:
+        # --- Token cap enforcement (LLD-E §6.2, runaway guard) -------------
+        if input_tokens > config.FRONTIER_MAX_INPUT_TOKENS * _CAP_HARD_MULT:
             raise FrontierTokenCapError(
-                f"Input tokens {input_tokens} exceed cap "
-                f"{config.FRONTIER_MAX_INPUT_TOKENS} (LLD-E §6.2). "
-                "Response discarded."
+                f"Input tokens {input_tokens} grossly exceed cap "
+                f"{config.FRONTIER_MAX_INPUT_TOKENS} x{_CAP_HARD_MULT} "
+                "(LLD-E §6.2 runaway guard). Response discarded."
             )
-        if output_tokens > config.FRONTIER_MAX_OUTPUT_TOKENS:
+        if output_tokens > config.FRONTIER_MAX_OUTPUT_TOKENS * _CAP_HARD_MULT:
             raise FrontierTokenCapError(
-                f"Output tokens {output_tokens} exceed cap "
-                f"{config.FRONTIER_MAX_OUTPUT_TOKENS} (LLD-E §6.2). "
-                "Response discarded."
+                f"Output tokens {output_tokens} grossly exceed cap "
+                f"{config.FRONTIER_MAX_OUTPUT_TOKENS} x{_CAP_HARD_MULT} "
+                "(LLD-E §6.2 runaway guard). Response discarded."
             )
 
-        # --- Cost computation from PROVIDER_PRICES -------------------------
-        fallback_prices = (
-            config.MAX_INPUT_PRICE_PER_M_USD,
-            config.MAX_OUTPUT_PRICE_PER_M_USD,
+        # --- Cost computation ----------------------------------------------
+        # Prefer the provider's own authoritative per-call cost when reported
+        # (OpenRouter returns usage.cost in USD); else fall back to the
+        # PROVIDER_PRICES table (Meta/Grok do not report a cost field).
+        cost_usd: float
+        reported = usage.get("cost")
+        reported_ok = (
+            isinstance(reported, (int, float))
+            and not isinstance(reported, bool)
+            and reported >= 0
         )
-        in_price, out_price = config.PROVIDER_PRICES.get(
-            self._price_key, fallback_prices
-        )
-        cost_usd: float = (
-            input_tokens / 1e6 * in_price + output_tokens / 1e6 * out_price
-        )
+        if reported_ok:
+            cost_usd = float(reported)
+        else:
+            fallback_prices = (
+                config.MAX_INPUT_PRICE_PER_M_USD,
+                config.MAX_OUTPUT_PRICE_PER_M_USD,
+            )
+            in_price, out_price = config.PROVIDER_PRICES.get(
+                self._price_key, fallback_prices
+            )
+            cost_usd = input_tokens / 1e6 * in_price + output_tokens / 1e6 * out_price
 
-        # --- Parse text (OpenAI chat/completions format) -------------------
-        text: str = str(raw["choices"][0]["message"]["content"])
+        # --- Parse text (chat/completions or Responses API) ----------------
+        if self._api_style == "responses":
+            text: str = _extract_responses_text(raw)
+        else:
+            text = _extract_chat_text(raw)
         response_model: str = str(raw.get("model", model))
 
         return ModelResponse(
@@ -427,8 +509,15 @@ class OpenRouterClient(_OpenAICompatBase):
 
     **API key:** environment variable ``OPENROUTER_API_KEY``.
 
-    **Cost:** uses ``PROVIDER_PRICES["openrouter_qwen_flash"]``
-    ($0.03 / $0.13 per 1M tokens).
+    **Cost:** prefers OpenRouter's authoritative ``usage.cost`` field; falls
+    back to ``PROVIDER_PRICES["openrouter_default"]`` ($0.05 / $0.10 per 1M —
+    a conservative upper bound across the roster).
+
+    **Models:** use a NON-reasoning instruct model (e.g.
+    :data:`~config.OPENROUTER_DEFAULT_MODEL` =
+    ``mistralai/mistral-small-24b-instruct-2501``).  A reasoning model returns
+    ``content: null`` under the 160-token output cap and
+    :func:`_extract_chat_text` will raise rather than emit ``"None"``.
 
     Args:
         transport: Optional injectable transport for testing.  Defaults to a
@@ -442,7 +531,7 @@ class OpenRouterClient(_OpenAICompatBase):
 
     Example (requires ``FRONTIER_ENABLED = True`` and key set):
         >>> client = OpenRouterClient()
-        >>> resp = client.generate("qwen/qwen3-7b-fast", "What is 2+2?")
+        >>> resp = client.generate("mistralai/mistral-small-24b-instruct-2501", "2+2?")
         >>> print(resp.text, resp.cost_usd)
     """
 
@@ -455,7 +544,7 @@ class OpenRouterClient(_OpenAICompatBase):
         super().__init__(
             endpoint=f"{base}/chat/completions",
             env_key_name="OPENROUTER_API_KEY",
-            price_key="openrouter_qwen_flash",
+            price_key="openrouter_default",
             transport=transport,
         )
 
@@ -469,9 +558,10 @@ class MetaSparkClient(_OpenAICompatBase):
     """Meta Contributor API adapter — ``https://api.meta.ai/v1/responses``.
 
     Posts directly to the Meta Responses endpoint (the full URL is the
-    endpoint; no ``/chat/completions`` suffix is appended).  The response is
-    parsed as OpenAI chat/completions format (Meta's OpenAI-compatible
-    interface).
+    endpoint; no ``/chat/completions`` suffix is appended).  The request uses
+    the OpenAI Responses shape (``input`` + ``max_output_tokens`` +
+    ``reasoning.effort``) and the response is parsed by
+    :func:`_extract_responses_text` (``output[].content[].text``).
 
     **API key:** environment variable ``MODEL_API_KEY``.
 
@@ -502,6 +592,7 @@ class MetaSparkClient(_OpenAICompatBase):
             env_key_name="MODEL_API_KEY",
             price_key="meta_contributor",
             transport=transport,
+            api_style="responses",
         )
 
 
