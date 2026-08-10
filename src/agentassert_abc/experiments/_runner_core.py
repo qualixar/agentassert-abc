@@ -3,7 +3,7 @@
 # AgentAssert: Formal Behavioral Contracts for AI Agents
 # Paper: arXiv:2602.22302 | https://agentassert.com
 
-"""Crash-proof mission batch executor (LLD-F §B, §C).
+"""Crash-proof mission batch executor with bounded concurrency (LLD-F §B, §C, §G).
 
 Extracted from :mod:`run` to keep that module under the 800-line cap.
 
@@ -13,8 +13,34 @@ Contains:
 - :func:`_read_prior_run` — reads a prior JSONL run for resume (LLD-F §C.1).
 - :func:`_write_progress` — heartbeat JSON writer (LLD-F §C.5).
 - :func:`_append_failure` — per-mission failure log writer (LLD-F §C.3).
+- :func:`_n_gen_nodes` — count generative nodes per motif (for the budget gate).
+- :func:`_run_batch_serial` — serial execution helper.
+- :func:`_run_batch_concurrent` — concurrent execution helper (ThreadPoolExecutor).
 - :func:`_execute_mission_batch` — the main execution loop with resume,
-  per-mission isolation, and heartbeat.
+  per-mission isolation, bounded concurrency, and heartbeat (LLD-F §G).
+
+Concurrency design (LLD-F §G.1) — lock-free "compute concurrently, write serially,
+sorted by canonical index":
+
+1. All mission specs are enumerated in canonical ``(motif, condition, i)`` order
+   and tagged with a 0-based ``idx``.
+2. Resume: drop specs already in ``completed_ids``; seed ledger from prior cost.
+3. Remaining specs are batched in chunks of ``batch_size=25``.
+4. Per batch, IN ORDER:
+   a. Prospective budget gate — checked SINGLE-THREADED before any dispatch.
+      Worst-case spend = Σ ``n_gen_nodes(motif) × per_call_ceiling``.
+      Raises :exc:`~.budget.BudgetExceeded` and dispatches NOTHING if gate fires.
+   b. Concurrent compute — :class:`~concurrent.futures.ThreadPoolExecutor` submits
+      ``run_mission`` for each spec.  ``run_mission`` mutates no shared state;
+      the provider client is stateless and thread-safe (urllib per call).
+      Results are collected as ``(idx, result_or_exception)`` pairs.
+   c. Serial write — results sorted by ``idx`` are written one at a time:
+      success → logger.append + ledger.record + all_missions.append;
+      exception → ``_append_failure``.  Single-threaded → no locks needed.
+   d. Heartbeat — ``<out_path>.progress.json`` written after each batch.
+
+``concurrency=1`` is the serial fallback (byte-identical to the pre-concurrency
+runner) used for dry/local tiers.
 
 All helpers are private (underscore-prefixed).  The public interface of the
 :mod:`run` module is unchanged.
@@ -25,6 +51,7 @@ from __future__ import annotations
 import contextlib
 import datetime
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,6 +62,7 @@ from agentassert_abc.experiments.motifs import ModelClient, Motif, run_mission
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+    from concurrent.futures import Future
 
     from agentassert_abc.experiments.tasks import Task
 
@@ -49,6 +77,8 @@ __all__: list[str] = []  # internal module — nothing exported to the public AP
 _DETERMINISTIC_NODES: frozenset[str] = frozenset({"aggregator", "merge"})
 
 # Write progress.json every N missions (LLD-F §C.5).
+# Retained for backward-compatibility with tests that patch this constant; the
+# new per-batch heartbeat fires independently of this value.
 _HEARTBEAT_INTERVAL: int = 100
 
 
@@ -199,7 +229,129 @@ def _append_failure(
 
 
 # ---------------------------------------------------------------------------
-# _execute_mission_batch — main execution loop
+# _n_gen_nodes — generative node count for the budget gate
+# ---------------------------------------------------------------------------
+
+
+def _n_gen_nodes(motif: Motif) -> int:
+    """Return the number of generative (non-deterministic) nodes in *motif*.
+
+    Deterministic aggregator/merge nodes are excluded because they never call
+    ``client.generate``.  This count is used as the realistic worst-case call
+    count per mission execution in the prospective budget gate (LLD-F §G.1).
+
+    Conservative by design: inactive hierarchy workers are counted even though
+    only one branch is active per run — the gate must bound worst-case spend.
+
+    Args:
+        motif: A :class:`~.motifs.Motif` from :data:`~.motifs.MOTIF_LIBRARY`.
+
+    Returns:
+        Count of nodes in ``motif.nodes`` not in :data:`_DETERMINISTIC_NODES`.
+    """
+    return sum(1 for n in motif.nodes if n not in _DETERMINISTIC_NODES)
+
+
+# ---------------------------------------------------------------------------
+# Batch execution helpers
+# ---------------------------------------------------------------------------
+
+# A mission specification: (canonical_idx, mission_id, cluster_id, motif, condition, assignment)
+# canonical_idx is the global 0-based position across all (motif, condition, i) cells.
+_MissionSpec = tuple[int, str, str, Motif, str, dict[str, str]]
+
+# Result from one batch: (canonical_idx, MissionRecord) or (canonical_idx, exception)
+_BatchResult = tuple[int, MissionRecord | BaseException]
+
+
+def _run_batch_serial(
+    batch: list[_MissionSpec],
+    client: ModelClient,
+    task_sampler: Callable[[str], Task],
+) -> list[_BatchResult]:
+    """Execute a batch of mission specs serially.
+
+    Runs each spec in submission order.  Exceptions from ``run_mission`` are
+    caught per-spec and returned as ``(idx, exception)`` pairs — the caller
+    is responsible for routing them to ``_append_failure``.
+
+    Args:
+        batch:        Ordered list of mission specs.
+        client:       Model client (no network calls for DryRunClient).
+        task_sampler: Deterministic ``mission_id → Task`` callable.
+
+    Returns:
+        ``list[(canonical_idx, MissionRecord | exception)]`` in submission order.
+    """
+    results: list[_BatchResult] = []
+    for spec_idx, mission_id, cluster_id, motif, condition, assignment in batch:
+        task = task_sampler(mission_id)
+        try:
+            record = run_mission(
+                motif, task, assignment, client,
+                sharing_condition=condition,
+                cluster_id=cluster_id,
+                mission_id=mission_id,
+            )
+            results.append((spec_idx, record))
+        except Exception as exc:  # noqa: BLE001
+            results.append((spec_idx, exc))
+    return results
+
+
+def _run_batch_concurrent(
+    batch: list[_MissionSpec],
+    client: ModelClient,
+    task_sampler: Callable[[str], Task],
+    max_workers: int,
+) -> list[_BatchResult]:
+    """Execute a batch of mission specs concurrently via ThreadPoolExecutor.
+
+    Tasks are resolved in the main thread (``task_sampler`` is pure/deterministic
+    and must not be called from worker threads).  Each resolved spec is submitted
+    to the executor as ``run_mission(...)``.  ``run_mission`` mutates NO shared
+    state and the provider client is stateless (urllib per call) — thread-safe.
+
+    Results are collected AFTER the executor shuts down (all futures complete).
+    Exceptions from ``run_mission`` are captured per-future and returned as
+    ``(idx, exception)`` pairs so the caller can route them to ``_append_failure``.
+
+    Args:
+        batch:       Ordered list of mission specs.
+        client:      Stateless model client.
+        task_sampler: Deterministic ``mission_id → Task`` callable.
+        max_workers: Maximum concurrent worker threads.
+
+    Returns:
+        ``list[(canonical_idx, MissionRecord | exception)]`` in submission order.
+        The returned list is already in canonical order (submission = canonical);
+        ``_execute_mission_batch`` sorts it defensively before writing.
+    """
+    futures_and_idx: list[tuple[int, Future[MissionRecord]]] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for spec_idx, mission_id, cluster_id, motif, condition, assignment in batch:
+            task = task_sampler(mission_id)
+            fut = executor.submit(
+                run_mission,
+                motif, task, assignment, client,
+                sharing_condition=condition,
+                cluster_id=cluster_id,
+                mission_id=mission_id,
+            )
+            futures_and_idx.append((spec_idx, fut))
+    # executor.__exit__ calls shutdown(wait=True) — all futures are done here.
+
+    results: list[_BatchResult] = []
+    for spec_idx, fut in futures_and_idx:
+        try:
+            results.append((spec_idx, fut.result()))
+        except Exception as exc:  # noqa: BLE001
+            results.append((spec_idx, exc))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# _execute_mission_batch — main execution loop (LLD-F §G)
 # ---------------------------------------------------------------------------
 
 
@@ -213,18 +365,30 @@ def _execute_mission_batch(
     model_pairs: dict[str, tuple[str, str]],
     task_sampler: Callable[[str], Task],
     per_call_ceiling: float = 0.0,
+    concurrency: int = 1,
 ) -> list[MissionRecord]:
-    """Execute all missions and append each to the JSONL log.
+    """Execute all missions with optional bounded concurrency and return results.
 
-    Iterates over every ``(motif, condition)`` cell and runs *n_per_cell*
-    missions via *task_sampler* (one task per mission ID), logging each via
-    :class:`~.logging_schema.JsonlLogger` and accumulating API cost in *ledger*.
+    Implements the LLD-F §G.1 "compute concurrently, write serially, sorted"
+    design.  Key invariants:
+
+    * **Budget gate** is checked single-threaded BEFORE any dispatch for each
+      batch.  The worst-case cost is ``Σ n_gen_nodes(motif) × per_call_ceiling``
+      which correctly counts real API calls (fixing the prior per-mission==1-call
+      under-count).  A gate trip raises :exc:`~.budget.BudgetExceeded` and
+      dispatches NOTHING.
+    * **JSONL order** is canonical (global 0-based ``idx`` across all
+      ``(motif, condition, i)`` cells) regardless of thread completion order,
+      guaranteeing reproducible analysis (drift / e-process first-crossing).
+    * **Ledger mutations** (``record``) happen only in the single-threaded write
+      phase — no lock needed.
+    * ``concurrency=1`` is byte-identical to the pre-concurrency serial runner.
 
     Resume / idempotency (LLD-F §C.1)
     -----------------------------------
     If *out_path* already exists, completed mission IDs and their prior cost
     are read first.  Completed missions are skipped (no re-run, no re-charge)
-    and the ledger is pre-seeded with the prior cost so the $19.50 batch gate
+    and the ledger is pre-seeded with the prior cost so the $19.50 gate
     accounts for total study spend across restarts.
 
     Per-mission isolation (LLD-F §C.3)
@@ -232,40 +396,42 @@ def _execute_mission_batch(
     Each ``run_mission`` call is wrapped in a try/except.  Unrecoverable errors
     are logged to ``<out_path>.failures.jsonl`` and the run continues.
 
-    Heartbeat (LLD-F §C.5)
-    -----------------------
-    Every :data:`_HEARTBEAT_INTERVAL` missions a progress JSON is written.
+    Heartbeat (LLD-F §C.5 / §G.1.d)
+    ----------------------------------
+    A progress JSON is written after every batch (≤ 25 missions).
 
-    Returns the complete list of successfully executed
-    :class:`~.logging_schema.MissionRecord` objects in execution order.
+    Args:
+        client:            Model client injected for all generate calls.
+        motifs:            Motif sequence (defines the canonical enumeration order).
+        sharing_conditions: Condition labels (define the canonical enumeration order).
+        n_per_cell:        Missions per ``(motif, condition)`` cell.
+        out_path:          JSONL log path (also base for ``.progress.json`` /
+                           ``.failures.jsonl``).
+        ledger:            Budget ledger (pre-seeded with prior spend on resume).
+        model_pairs:       Condition → ``(model_a, model_b)`` mapping.
+        task_sampler:      ``mission_id → Task`` callable (deterministic / pure).
+        per_call_ceiling:  Worst-case cost per API call in USD.  ``0.0`` for
+                           dry/local tiers (gate disabled); must be
+                           ``config.PER_CALL_CEILING_USD`` for paid frontier runs.
+        concurrency:       Worker threads for concurrent execution.  ``1`` → serial
+                           (byte-identical to pre-concurrency runner).  Frontier
+                           tier passes ``config.FRONTIER_CONCURRENCY``.
+
+    Returns:
+        Complete list of successfully executed :class:`~.logging_schema.MissionRecord`
+        objects (includes records pre-populated from a prior run on resume).
+
+    Raises:
+        BudgetExceeded: Prospective gate for a batch would breach
+            ``config.BUDGET_STOP_USD``.  No missions in the offending batch
+            are dispatched.
     """
     out_path = Path(str(out_path))
     logger = JsonlLogger(out_path)
 
-    # --- C.1 Resume: read prior run and seed ledger -------------------------
-    completed_ids, prior_cost = _read_prior_run(out_path)
-    if prior_cost > 0.0:
-        ledger.record(prior_cost)
-
-    # Pre-populate with prior records so callers (e.g. _build_summary) receive
-    # the FULL mission set regardless of how many missions are skipped this run.
-    # On a complete resume (every mission already logged) the returned list is
-    # still correct — callers never see an empty list for a finished experiment.
-    if completed_ids:
-        try:
-            all_missions: list[MissionRecord] = list(JsonlLogger(out_path).read_all())
-        except Exception:  # noqa: BLE001
-            all_missions = []
-    else:
-        all_missions = []
-
-    # LLD-E §6.3: prospective worst-case budget gate before each batch of <=25.
-    # per_call_ceiling is 0.0 for $0 dry/local clients; a paid FrontierClient
-    # MUST pass config.PER_CALL_CEILING_USD so the $19.50 hard stop is live.
-    batch_size = 25
-    total = len(motifs) * len(sharing_conditions) * n_per_cell
-    issued = 0
-
+    # --- Step 1: Enumerate all specs in canonical order ----------------------
+    specs: list[_MissionSpec] = []
+    canonical_idx = 0
     for motif in motifs:
         for condition in sharing_conditions:
             model_a, model_b = model_pairs.get(
@@ -276,65 +442,80 @@ def _execute_mission_batch(
             for i in range(n_per_cell):
                 mission_id = f"mission-{motif.name}-{condition}-{i}"
                 cluster_id = f"cluster-{condition}-{i}"
+                specs.append(
+                    (canonical_idx, mission_id, cluster_id, motif, condition, assignment)
+                )
+                canonical_idx += 1
 
-                # --- C.1 Resume: skip completed missions ---------------------
-                if mission_id in completed_ids:
-                    issued += 1
-                    if issued % _HEARTBEAT_INTERVAL == 0:
-                        _write_progress(
-                            out_path, completed=issued, total=total,
-                            spent_usd=ledger.spent,
-                        )
-                    continue
+    total = len(specs)
 
-                # Budget gate before each new batch of ≤25 fresh missions.
-                if issued % batch_size == 0:
-                    upcoming = min(batch_size, total - issued)
-                    if not ledger.plan_batch(per_call_ceiling, upcoming):
-                        raise BudgetExceeded(
-                            f"Budget stop before batch: spent={ledger.spent:.6f} USD; "
-                            f"worst-case next {upcoming} calls at "
-                            f"{per_call_ceiling:.6f}/call would exceed the "
-                            f"{config.BUDGET_STOP_USD} USD hard stop."
-                        )
+    # --- Step 2: Resume — read prior run, seed ledger, pre-populate ----------
+    completed_ids, prior_cost = _read_prior_run(out_path)
+    if prior_cost > 0.0:
+        ledger.record(prior_cost)
 
-                # --- C.2 Per-mission task resolution ------------------------
-                task = task_sampler(mission_id)
+    # Pre-populate with prior records so callers receive the FULL set on resume.
+    if completed_ids:
+        try:
+            all_missions: list[MissionRecord] = list(JsonlLogger(out_path).read_all())
+        except Exception:  # noqa: BLE001
+            all_missions = []
+    else:
+        all_missions = []
 
-                # --- C.3 Per-mission isolation: catch all errors ------------
-                try:
-                    record = run_mission(
-                        motif, task, assignment, client,
-                        sharing_condition=condition,
-                        cluster_id=cluster_id,
-                        mission_id=mission_id,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    _append_failure(
-                        out_path,
-                        mission_id=mission_id,
-                        condition=condition,
-                        motif=motif.name,
-                        error=repr(exc),
-                    )
-                    issued += 1
-                    if issued % _HEARTBEAT_INTERVAL == 0:
-                        _write_progress(
-                            out_path, completed=issued, total=total,
-                            spent_usd=ledger.spent,
-                        )
-                    continue
+    # Drop already-completed specs; count them toward the issued total.
+    remaining: list[_MissionSpec] = [
+        spec for spec in specs if spec[1] not in completed_ids
+    ]
+    issued = total - len(remaining)  # already-completed missions counted
 
-                logger.append(record)
-                ledger.record(record.cost_usd)
-                issued += 1
-                all_missions.append(record)
+    # --- Step 3: Batch remaining specs into chunks of batch_size -------------
+    batch_size = 25
+    for batch_start in range(0, len(remaining), batch_size):
+        batch = remaining[batch_start : batch_start + batch_size]
 
-                # --- C.5 Progress heartbeat ---------------------------------
-                if issued % _HEARTBEAT_INTERVAL == 0:
-                    _write_progress(
-                        out_path, completed=issued, total=total,
-                        spent_usd=ledger.spent,
-                    )
+        # --- Step 4a: Prospective gate (SINGLE-THREADED, before dispatch) ----
+        # Fix: count real API calls (Σ n_gen_nodes), not 1 per mission.
+        # Gate is skipped when ceiling==0.0 (dry/local — $0 spend is guaranteed).
+        if per_call_ceiling > 0.0:
+            total_calls = sum(_n_gen_nodes(spec[3]) for spec in batch)
+            if not ledger.plan_batch(per_call_ceiling, total_calls):
+                raise BudgetExceeded(
+                    f"Budget stop before batch: spent={ledger.spent:.6f} USD; "
+                    f"worst-case {total_calls} calls at "
+                    f"{per_call_ceiling:.6f}/call would exceed the "
+                    f"{config.BUDGET_STOP_USD} USD hard stop."
+                )
+
+        # --- Step 4b: Concurrent (or serial) compute -------------------------
+        if concurrency == 1:
+            results = _run_batch_serial(batch, client, task_sampler)
+        else:
+            results = _run_batch_concurrent(batch, client, task_sampler, concurrency)
+
+        # --- Step 4c: Serial write, sorted by canonical idx ------------------
+        # Sorting guarantees canonical JSONL order regardless of completion order.
+        results.sort(key=lambda r: r[0])
+        idx_to_spec: dict[int, _MissionSpec] = {s[0]: s for s in batch}
+        for spec_idx, outcome in results:
+            _, mission_id, _, motif_obj, condition, _ = idx_to_spec[spec_idx]
+            if isinstance(outcome, BaseException):
+                _append_failure(
+                    out_path,
+                    mission_id=mission_id,
+                    condition=condition,
+                    motif=motif_obj.name,
+                    error=repr(outcome),
+                )
+            else:
+                logger.append(outcome)
+                ledger.record(outcome.cost_usd)
+                all_missions.append(outcome)
+            issued += 1
+
+        # --- Step 4d: Heartbeat after each batch -----------------------------
+        _write_progress(
+            out_path, completed=issued, total=total, spent_usd=ledger.spent,
+        )
 
     return all_missions

@@ -426,24 +426,24 @@ def _build_summary(
 
 def _resolve_run_tier(
     client: ModelClient,
-) -> tuple[dict[str, tuple[str, str]], float]:
-    """Auto-select the model-pair table and §6.3 batch-gate ceiling for *client*.
+) -> tuple[dict[str, tuple[str, str]], float, int]:
+    """Auto-select the model-pair table, §6.3 batch-gate ceiling, and concurrency.
 
-    - :class:`DryRunClient`  → ``_DRY_MODEL_PAIRS``,   ceiling ``0.0`` ($0).
-    - :class:`~.models.LocalClient` → ``_LOCAL_MODEL_PAIRS``, ceiling ``0.0``
-      (Ollama; $0 API cost).
-    - anything else (a PAID frontier adapter) → ``_FRONTIER_MODEL_PAIRS`` and
-      ``config.PER_CALL_CEILING_USD`` — this is what ARMS the $19.50 prospective
-      batch gate.  A ceiling of 0.0 here would silently disable the gate, so a
-      non-dry/non-local client MUST get the real per-call ceiling.
+    - :class:`DryRunClient`  → ``_DRY_MODEL_PAIRS``,   ceiling ``0.0``,  concurrency ``1``.
+    - :class:`~.models.LocalClient` → ``_LOCAL_MODEL_PAIRS``, ceiling ``0.0``, concurrency ``1``.
+    - anything else (a PAID frontier adapter) → ``_FRONTIER_MODEL_PAIRS``,
+      ``config.PER_CALL_CEILING_USD``, and ``config.FRONTIER_CONCURRENCY``.
+      A ceiling of 0.0 would silently disable the gate, so a non-dry/non-local
+      client MUST get the real per-call ceiling.  Concurrency 1 on dry/local
+      keeps the serial path byte-identical to pre-concurrency behaviour.
     """
     if isinstance(client, DryRunClient):
-        return _DRY_MODEL_PAIRS, 0.0
+        return _DRY_MODEL_PAIRS, 0.0, 1
     from agentassert_abc.experiments.models import LocalClient  # noqa: PLC0415
 
     if isinstance(client, LocalClient):
-        return _LOCAL_MODEL_PAIRS, 0.0
-    return _FRONTIER_MODEL_PAIRS, config.PER_CALL_CEILING_USD
+        return _LOCAL_MODEL_PAIRS, 0.0, 1
+    return _FRONTIER_MODEL_PAIRS, config.PER_CALL_CEILING_USD, config.FRONTIER_CONCURRENCY
 
 
 # ---------------------------------------------------------------------------
@@ -500,7 +500,7 @@ def run_experiment(
         BudgetExceeded: The prospective §6.3 batch gate would breach the
             $19.50 hard stop (only fires when the ceiling is armed).
     """
-    resolved_pairs, resolved_ceiling = _resolve_run_tier(client)
+    resolved_pairs, resolved_ceiling, resolved_concurrency = _resolve_run_tier(client)
     if model_pairs is None:
         model_pairs = resolved_pairs
     if per_call_ceiling is None:
@@ -529,6 +529,7 @@ def run_experiment(
         client, motifs, sharing_conditions, n_per_cell, out_path, ledger, model_pairs,
         task_sampler,
         per_call_ceiling=per_call_ceiling,
+        concurrency=resolved_concurrency,
     )
     return _build_summary(all_missions, p0, alpha, ledger, out_path)
 

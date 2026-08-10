@@ -120,3 +120,8 @@ FRONTIER_MAX_RETRIES: Final[int] = 4
 # Base delay in seconds for exponential backoff between retry attempts.
 # Actual delay = FRONTIER_BACKOFF_BASE_S * 2**attempt + uniform(0, 0.1).
 FRONTIER_BACKOFF_BASE_S: Final[float] = 1.0
+
+# Maximum concurrent worker threads for frontier mission execution (LLD-F §G.1).
+# Frontier tier passes this value to _execute_mission_batch; dry/local stays at 1
+# (serial path — byte-identical to the pre-concurrency runner).
+FRONTIER_CONCURRENCY: Final[int] = 16
