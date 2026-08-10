@@ -509,6 +509,28 @@ def _build_summary(
     )
 
 
+def _resolve_run_tier(
+    client: ModelClient,
+) -> tuple[dict[str, tuple[str, str]], float]:
+    """Auto-select the model-pair table and §6.3 batch-gate ceiling for *client*.
+
+    - :class:`DryRunClient`  → ``_DRY_MODEL_PAIRS``,   ceiling ``0.0`` ($0).
+    - :class:`~.models.LocalClient` → ``_LOCAL_MODEL_PAIRS``, ceiling ``0.0``
+      (Ollama; $0 API cost).
+    - anything else (a PAID frontier adapter) → ``_FRONTIER_MODEL_PAIRS`` and
+      ``config.PER_CALL_CEILING_USD`` — this is what ARMS the $19.50 prospective
+      batch gate.  A ceiling of 0.0 here would silently disable the gate, so a
+      non-dry/non-local client MUST get the real per-call ceiling.
+    """
+    if isinstance(client, DryRunClient):
+        return _DRY_MODEL_PAIRS, 0.0
+    from agentassert_abc.experiments.models import LocalClient  # noqa: PLC0415
+
+    if isinstance(client, LocalClient):
+        return _LOCAL_MODEL_PAIRS, 0.0
+    return _FRONTIER_MODEL_PAIRS, config.PER_CALL_CEILING_USD
+
+
 # ---------------------------------------------------------------------------
 # Public API: run_experiment
 # ---------------------------------------------------------------------------
@@ -524,6 +546,8 @@ def run_experiment(
     alpha: float,
     out_path: Path | str,
     ledger: BudgetLedger,
+    model_pairs: dict[str, tuple[str, str]] | None = None,
+    per_call_ceiling: float | None = None,
 ) -> ExperimentSummary:
     """Orchestrate the $20-capped validation experiment and return all reports.
 
@@ -533,16 +557,27 @@ def run_experiment(
     reports as a frozen :class:`ExperimentSummary`.  All missions use
     :data:`~.tasks.TASK_LIBRARY[0]` (``arith_add``).
 
+    Model-pair selection and the §6.3 batch-gate ceiling are auto-detected from
+    the client's tier via :func:`_resolve_run_tier` (dry/local → $0, no gate;
+    a paid frontier adapter → :data:`_FRONTIER_MODEL_PAIRS` and
+    ``config.PER_CALL_CEILING_USD``, which ARMS the $19.50 prospective stop).
+    Pass *model_pairs* and/or *per_call_ceiling* explicitly to override the
+    auto-detection (e.g. a preregistration amendment); an explicit
+    ``per_call_ceiling`` is used verbatim, so never pass 0.0 for a paid client.
+
     Raises:
         RunError: No scored agent pair co-appears in >= 2 missions.
+        BudgetExceeded: The prospective §6.3 batch gate would breach the
+            $19.50 hard stop (only fires when the ceiling is armed).
     """
-    is_dry = isinstance(client, DryRunClient)
-    model_pairs = _DRY_MODEL_PAIRS if is_dry else _LOCAL_MODEL_PAIRS
-    # DryRun/Local clients cost $0 → ceiling 0.0. A future paid FrontierClient
-    # must pass config.PER_CALL_CEILING_USD to arm the §6.3 batch gate.
+    resolved_pairs, resolved_ceiling = _resolve_run_tier(client)
+    if model_pairs is None:
+        model_pairs = resolved_pairs
+    if per_call_ceiling is None:
+        per_call_ceiling = resolved_ceiling
     all_missions = _execute_mission_batch(
         client, motifs, sharing_conditions, n_per_cell, out_path, ledger, model_pairs,
-        per_call_ceiling=0.0,
+        per_call_ceiling=per_call_ceiling,
     )
     return _build_summary(all_missions, p0, alpha, ledger, out_path)
 

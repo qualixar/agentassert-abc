@@ -553,3 +553,83 @@ class TestRunError:
         err = run.RunError("test message")
         assert isinstance(err, Exception)
         assert str(err) == "test message"
+
+
+# ---------------------------------------------------------------------------
+# TestFrontierTierAutoResolution
+#
+# Regression for the run_experiment bug where a paid (non-dry/non-local) client
+# silently got _LOCAL_MODEL_PAIRS (Ollama IDs) and per_call_ceiling=0.0 — which
+# sent wrong model names AND disarmed the §6.3 prospective budget gate.
+# ---------------------------------------------------------------------------
+
+
+class _FakeFrontierClient:
+    """A ModelClient that is neither DryRunClient nor LocalClient.
+
+    run_experiment must therefore treat it as a *frontier* (paid) tier:
+    use _FRONTIER_MODEL_PAIRS and arm the $19.50 batch gate.
+    """
+
+    def __init__(self, cost_usd: float = 0.0) -> None:
+        self.models_seen: list[str] = []
+        self._cost = cost_usd
+
+    def generate(self, model: str, prompt: str) -> ModelResponse:  # noqa: ARG002
+        self.models_seen.append(model)
+        return ModelResponse(
+            text="6912",
+            input_tokens=10,
+            output_tokens=2,
+            model=model,
+            cost_usd=self._cost,
+        )
+
+
+class TestFrontierTierAutoResolution:
+    """A frontier-tier client gets the frontier roster + an armed budget gate."""
+
+    def test_frontier_client_uses_frontier_model_pairs(self, tmp_path: Path) -> None:
+        from agentassert_abc.experiments import config  # noqa: PLC0415
+
+        run = _import_run()
+        client = _FakeFrontierClient()
+        run.run_experiment(
+            client,
+            motifs=[MOTIF_LIBRARY["series2"]],
+            sharing_conditions=["same_model"],
+            n_per_cell=2,
+            p0=0.80,
+            alpha=0.05,
+            out_path=tmp_path / "frontier_pairs.jsonl",
+            ledger=BudgetLedger(),
+        )
+        # same_model → every generative leg is the OpenRouter anchor, never an
+        # Ollama id from _LOCAL_MODEL_PAIRS.
+        assert client.models_seen, "no generate calls were made"
+        assert all(m == config.OPENROUTER_DEFAULT_MODEL for m in client.models_seen), (
+            f"frontier run used non-anchor model ids: {client.models_seen}"
+        )
+
+    def test_frontier_client_arms_budget_gate(self, tmp_path: Path) -> None:
+        from agentassert_abc.experiments.budget import BudgetExceeded  # noqa: PLC0415
+
+        run = _import_run()
+        client = _FakeFrontierClient(cost_usd=0.0)
+        ledger = BudgetLedger()
+        ledger.record(19.40)  # within one 25-call batch of the $19.50 hard stop
+        # Gate armed (ceiling=PER_CALL_CEILING_USD) → the prospective plan_batch
+        # trips BEFORE any generate call.  With the old ceiling=0.0 bug the gate
+        # was a no-op and this run would proceed to spend.
+        with pytest.raises(BudgetExceeded):
+            run.run_experiment(
+                client,
+                motifs=[MOTIF_LIBRARY["series2"]],
+                sharing_conditions=["same_model"],
+                n_per_cell=25,
+                p0=0.80,
+                alpha=0.05,
+                out_path=tmp_path / "frontier_gate.jsonl",
+                ledger=ledger,
+            )
+        assert client.models_seen == [], "gate must trip before any generate call"
