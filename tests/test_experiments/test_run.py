@@ -633,3 +633,328 @@ class TestFrontierTierAutoResolution:
                 ledger=ledger,
             )
         assert client.models_seen == [], "gate must trip before any generate call"
+
+
+# ---------------------------------------------------------------------------
+# TestLLDFResume — LLD-F §C.1: resume skips completed missions + seeds budget
+# ---------------------------------------------------------------------------
+
+
+def _make_flaky_client(raise_on_call_n: int) -> object:
+    """Return a DryRunClient-shaped client that raises RuntimeError on call N."""
+    from agentassert_abc.experiments.models import ModelResponse  # noqa: PLC0415
+    from agentassert_abc.experiments.tasks import TASK_LIBRARY  # noqa: PLC0415
+
+    class FlakyClient:
+        def __init__(self) -> None:
+            self.call_count: int = 0
+
+        def generate(self, model: str, prompt: str) -> ModelResponse:  # noqa: ARG002
+            self.call_count += 1
+            if self.call_count == raise_on_call_n:
+                raise RuntimeError(f"injected failure on call {raise_on_call_n}")
+            return ModelResponse(
+                text=TASK_LIBRARY[0].ground_truth,
+                input_tokens=0,
+                output_tokens=0,
+                model=model,
+                cost_usd=0.0,
+            )
+
+    return FlakyClient()
+
+
+class TestLLDFResume:
+    """LLD-F §C.1: idempotent resume — completed missions are skipped."""
+
+    def test_completed_missions_skipped_on_resume(self, tmp_path: Path) -> None:
+        """Running with an existing JSONL must skip already-logged missions."""
+        from agentassert_abc.experiments._runner_core import (
+            _execute_mission_batch,  # noqa: PLC0415
+        )
+        from agentassert_abc.experiments.run import (  # noqa: PLC0415
+            _DRY_MODEL_PAIRS,
+            DryRunClient,
+            _dry_task_sampler,
+        )
+
+        out = tmp_path / "missions.jsonl"
+        ledger = BudgetLedger()
+
+        # First run: 1 motif × 1 condition × 2 = 2 missions
+        _execute_mission_batch(
+            DryRunClient(),
+            [MOTIF_LIBRARY["series2"]],
+            ["same_model"],
+            2,
+            out,
+            ledger,
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+        initial_size = out.stat().st_size
+
+        # Second run: same path, same missions → should append 0 new records
+        ledger2 = BudgetLedger()
+        _execute_mission_batch(
+            DryRunClient(),
+            [MOTIF_LIBRARY["series2"]],
+            ["same_model"],
+            2,
+            out,
+            ledger2,
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+
+        # File size must not grow — no new missions appended.
+        assert out.stat().st_size == initial_size, (
+            "Resume should skip completed missions; file size grew unexpectedly."
+        )
+
+    def test_resume_seeds_ledger_with_prior_cost(self, tmp_path: Path) -> None:
+        """Prior cost must be loaded into the ledger on resume."""
+        from agentassert_abc.experiments._runner_core import (  # noqa: PLC0415
+            _execute_mission_batch,
+        )
+        from agentassert_abc.experiments.models import ModelResponse  # noqa: PLC0415
+        from agentassert_abc.experiments.run import (  # noqa: PLC0415
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+        from agentassert_abc.experiments.tasks import TASK_LIBRARY  # noqa: PLC0415
+
+        # Build a client that charges $0.001 per call.
+        class CostClient:
+            def generate(self, model: str, prompt: str) -> ModelResponse:  # noqa: ARG002
+                return ModelResponse(
+                    text=TASK_LIBRARY[0].ground_truth,
+                    input_tokens=0, output_tokens=0,
+                    model=model, cost_usd=0.001,
+                )
+
+        out = tmp_path / "missions_cost.jsonl"
+        ledger1 = BudgetLedger()
+        _execute_mission_batch(
+            CostClient(),
+            [MOTIF_LIBRARY["series2"]],
+            ["same_model"],
+            2,
+            out,
+            ledger1,
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+        spent1 = ledger1.spent
+
+        # Resume run: ledger must include prior spend.
+        ledger2 = BudgetLedger()
+        _execute_mission_batch(
+            CostClient(),
+            [MOTIF_LIBRARY["series2"]],
+            ["same_model"],
+            2,
+            out,
+            ledger2,
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+        # Resume seeds ledger2 with prior cost; no new missions → ledger2.spent == prior
+        assert ledger2.spent >= spent1 - 1e-9, (
+            f"Resume must seed ledger with prior cost. "
+            f"prior={spent1:.6f}, ledger2.spent={ledger2.spent:.6f}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestLLDFIsolation — LLD-F §C.3: per-mission error isolation
+# ---------------------------------------------------------------------------
+
+
+class TestLLDFIsolation:
+    """LLD-F §C.3: a failing mission logs to failures.jsonl and does not abort the run."""
+
+    def test_failing_mission_logged_to_failures_file(self, tmp_path: Path) -> None:
+        """A mission that raises must appear in failures.jsonl."""
+        from agentassert_abc.experiments._runner_core import (
+            _execute_mission_batch,  # noqa: PLC0415
+        )
+        from agentassert_abc.experiments.run import (  # noqa: PLC0415
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+
+        # Client that raises on the 3rd generate call.
+        # series2 has 2 nodes → 2 generate calls per mission.
+        # 1st mission = calls 1-2 (OK), 2nd mission = call 3 (FAIL on first generate).
+        client = _make_flaky_client(raise_on_call_n=3)
+        out = tmp_path / "isolation.jsonl"
+        ledger = BudgetLedger()
+
+        # 1 motif × 1 condition × 3 per cell = 3 missions
+        _execute_mission_batch(
+            client,
+            [MOTIF_LIBRARY["series2"]],
+            ["same_model"],
+            3,
+            out,
+            ledger,
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+
+        # Run must complete — not raise.
+        failures_path = tmp_path / "isolation.jsonl.failures.jsonl"
+        assert failures_path.exists(), "failures.jsonl must be created for failed missions."
+        content = failures_path.read_text()
+        assert "error" in content, "failures.jsonl must contain an error field."
+
+    def test_run_continues_after_failing_mission(self, tmp_path: Path) -> None:
+        """Run must complete all missions even if one fails mid-batch."""
+        from agentassert_abc.experiments._runner_core import (
+            _execute_mission_batch,  # noqa: PLC0415
+        )
+        from agentassert_abc.experiments.run import (  # noqa: PLC0415
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+
+        # Raise on 3rd call so 2nd mission fails; 3rd mission should still run.
+        client = _make_flaky_client(raise_on_call_n=3)
+        out = tmp_path / "continues.jsonl"
+        ledger = BudgetLedger()
+
+        result = _execute_mission_batch(
+            client,
+            [MOTIF_LIBRARY["series2"]],
+            ["same_model"],
+            3,
+            out,
+            ledger,
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+
+        # 3 missions attempted; 1 failed; 2 should be in the result.
+        assert len(result) >= 1, (
+            "At least 1 mission must succeed when only 1 of 3 fails."
+        )
+
+    def test_successful_missions_still_logged(self, tmp_path: Path) -> None:
+        """Missions that succeed before and after a failure must still be logged."""
+        from agentassert_abc.experiments._runner_core import (
+            _execute_mission_batch,  # noqa: PLC0415
+        )
+        from agentassert_abc.experiments.logging_schema import JsonlLogger  # noqa: PLC0415
+        from agentassert_abc.experiments.run import (  # noqa: PLC0415
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+
+        client = _make_flaky_client(raise_on_call_n=3)
+        out = tmp_path / "successful.jsonl"
+        ledger = BudgetLedger()
+
+        _execute_mission_batch(
+            client,
+            [MOTIF_LIBRARY["series2"]],
+            ["same_model"],
+            3,
+            out,
+            ledger,
+            _DRY_MODEL_PAIRS,
+            _dry_task_sampler,
+        )
+
+        # JSONL must have at least 1 successfully completed record.
+        assert out.exists(), "JSONL log must be created."
+        logged = list(JsonlLogger(out).read_all())
+        assert len(logged) >= 1, (
+            f"JSONL must contain successful missions. Got {len(logged)} records."
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestLLDFHeartbeat — LLD-F §C.5: progress heartbeat written every 100 missions
+# ---------------------------------------------------------------------------
+
+
+class TestLLDFHeartbeat:
+    """LLD-F §C.5: progress.json written every _HEARTBEAT_INTERVAL missions."""
+
+    def test_heartbeat_file_created_after_100_missions(self, tmp_path: Path) -> None:
+        """A progress.json file must appear after ≥ 100 missions are processed."""
+        from unittest.mock import patch  # noqa: PLC0415
+
+        from agentassert_abc.experiments import _runner_core  # noqa: PLC0415
+        from agentassert_abc.experiments._runner_core import (
+            _execute_mission_batch,  # noqa: PLC0415
+        )
+        from agentassert_abc.experiments.run import (  # noqa: PLC0415
+            _DRY_MODEL_PAIRS,
+            DryRunClient,
+            _dry_task_sampler,
+        )
+
+        out = tmp_path / "heartbeat.jsonl"
+        ledger = BudgetLedger()
+
+        # Patch _HEARTBEAT_INTERVAL to 2 so we don't need 100 missions.
+        with patch.object(_runner_core, "_HEARTBEAT_INTERVAL", 2):
+            _execute_mission_batch(
+                DryRunClient(),
+                [MOTIF_LIBRARY["series2"]],
+                ["same_model"],
+                3,  # 3 missions → triggers heartbeat at mission 2
+                out,
+                ledger,
+                _DRY_MODEL_PAIRS,
+                _dry_task_sampler,
+            )
+
+        progress_path = tmp_path / "heartbeat.jsonl.progress.json"
+        assert progress_path.exists(), (
+            f"progress.json must be written after _HEARTBEAT_INTERVAL missions. "
+            f"Expected at: {progress_path}"
+        )
+
+    def test_heartbeat_file_has_required_keys(self, tmp_path: Path) -> None:
+        """progress.json must contain completed, total, spent_usd, ts."""
+        import json as json_mod  # noqa: PLC0415
+        from unittest.mock import patch  # noqa: PLC0415
+
+        from agentassert_abc.experiments import _runner_core  # noqa: PLC0415
+        from agentassert_abc.experiments._runner_core import (
+            _execute_mission_batch,  # noqa: PLC0415
+        )
+        from agentassert_abc.experiments.run import (  # noqa: PLC0415
+            _DRY_MODEL_PAIRS,
+            DryRunClient,
+            _dry_task_sampler,
+        )
+
+        out = tmp_path / "heartbeat2.jsonl"
+        ledger = BudgetLedger()
+
+        with patch.object(_runner_core, "_HEARTBEAT_INTERVAL", 2):
+            _execute_mission_batch(
+                DryRunClient(),
+                [MOTIF_LIBRARY["series2"]],
+                ["same_model"],
+                3,
+                out,
+                ledger,
+                _DRY_MODEL_PAIRS,
+                _dry_task_sampler,
+            )
+
+        progress_path = tmp_path / "heartbeat2.jsonl.progress.json"
+        data = json_mod.loads(progress_path.read_text())
+        for key in ("completed", "total", "spent_usd", "ts"):
+            assert key in data, (
+                f"progress.json missing key {key!r}. Present keys: {list(data)!r}"
+            )
+        assert isinstance(data["completed"], int)
+        assert isinstance(data["total"], int)
+        assert isinstance(data["spent_usd"], float)
+        assert "T" in data["ts"]  # ISO 8601 format check

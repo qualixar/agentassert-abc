@@ -107,3 +107,16 @@ OPENROUTER_DIFF_VENDOR_MODEL: Final[str] = "google/gemma-3-12b-it"
 # Grok model ID for the GrokBridgeClient breadth arm (local hermes proxy,
 #   subscription-backed, $0 per-call).
 GROK_MODEL: Final[str] = "grok-4.5"
+
+# --- Domain missions + robust runner (LLD-F) --------------------------------
+# Domains enabled for the confirmatory frontier run (retail + financial).
+EXPERIMENT_DOMAINS: Final[tuple[str, ...]] = ("retail", "financial")
+
+# Maximum total call attempts per frontier request (1 attempt + N-1 retries).
+# With FRONTIER_MAX_RETRIES=4: one initial attempt + up to 3 exponential-
+# backoff retries.  Default is 4 (total attempts), not 4 retries.
+FRONTIER_MAX_RETRIES: Final[int] = 4
+
+# Base delay in seconds for exponential backoff between retry attempts.
+# Actual delay = FRONTIER_BACKOFF_BASE_S * 2**attempt + uniform(0, 0.1).
+FRONTIER_BACKOFF_BASE_S: Final[float] = 1.0

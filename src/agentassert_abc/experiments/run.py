@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING
 
 from agentassert_abc.exceptions import AgentAssertError
 from agentassert_abc.experiments import config
+from agentassert_abc.experiments._runner_core import _execute_mission_batch
 from agentassert_abc.experiments.analysis import (
     CertificationReport,
     CompositionReport,
@@ -53,15 +54,16 @@ from agentassert_abc.experiments.analysis import (
     dependence_report,
     drift_report,
 )
-from agentassert_abc.experiments.budget import BudgetExceeded, BudgetLedger
-from agentassert_abc.experiments.logging_schema import JsonlLogger, MissionRecord
+from agentassert_abc.experiments.budget import BudgetLedger
 from agentassert_abc.experiments.models import ModelResponse
-from agentassert_abc.experiments.motifs import MOTIF_LIBRARY, ModelClient, Motif, run_mission
-from agentassert_abc.experiments.tasks import TASK_LIBRARY
+from agentassert_abc.experiments.motifs import MOTIF_LIBRARY, ModelClient, Motif
+from agentassert_abc.experiments.tasks import TASK_LIBRARY, Task
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from pathlib import Path
+
+    from agentassert_abc.experiments.logging_schema import MissionRecord
 
 __all__ = [
     "DryRunClient",
@@ -98,6 +100,21 @@ class RunError(AgentAssertError):
 # run_experiment always uses TASK_LIBRARY[0], so returning this canned answer
 # produces hard_ok=True for every node in every dry-run mission.
 _DRY_CANNED_ANSWER: str = TASK_LIBRARY[0].ground_truth
+
+
+# ---------------------------------------------------------------------------
+# Task sampler default (named function — not a lambda — for debuggability)
+# ---------------------------------------------------------------------------
+
+
+def _dry_task_sampler(mission_id: str) -> Task:  # noqa: ARG001
+    """Return TASK_LIBRARY[0] for all mission IDs.
+
+    Used by dry-run and local-tier experiments where DryRunClient always
+    returns the ground truth for arith_add.  Named at module level (not a
+    lambda) so it is hashable and has a descriptive repr.
+    """
+    return TASK_LIBRARY[0]
 
 
 class DryRunClient:
@@ -248,10 +265,6 @@ _FRONTIER_MODEL_PAIRS: dict[str, tuple[str, str]] = {
     ),
 }
 
-# Deterministic (non-generative) node IDs — never passed to client.generate.
-_DETERMINISTIC_NODES: frozenset[str] = frozenset({"aggregator", "merge"})
-
-
 # ---------------------------------------------------------------------------
 # Public factory: build_client
 # ---------------------------------------------------------------------------
@@ -351,36 +364,6 @@ def build_client(condition: str, tier: str) -> ModelClient:
 # ---------------------------------------------------------------------------
 
 
-def _build_model_assignment(
-    motif: Motif,
-    model_a: str,
-    model_b: str,
-) -> dict[str, str]:
-    """Map every node in *motif* to a model identifier.
-
-    Generative nodes alternate between *model_a* (even-indexed) and *model_b*
-    (odd-indexed).  Deterministic aggregator/merge nodes are excluded because
-    they never invoke ``client.generate``.
-
-    For the ``same_model`` sharing condition, pass identical values for
-    *model_a* and *model_b*.
-
-    Args:
-        motif:   A :class:`~.motifs.Motif` from :data:`~.motifs.MOTIF_LIBRARY`.
-        model_a: Model identifier for even-indexed generative nodes.
-        model_b: Model identifier for odd-indexed generative nodes.
-
-    Returns:
-        ``dict[node_id → model_identifier]`` covering all non-deterministic
-        nodes.
-    """
-    assignment: dict[str, str] = {}
-    gen_nodes = [n for n in motif.nodes if n not in _DETERMINISTIC_NODES]
-    for idx, node_id in enumerate(gen_nodes):
-        assignment[node_id] = model_a if idx % 2 == 0 else model_b
-    return assignment
-
-
 def _select_dependence_pair(
     missions: Sequence[MissionRecord],
 ) -> tuple[str, str]:
@@ -419,74 +402,6 @@ def _select_dependence_pair(
             f"Increase n_per_cell or add more motifs."
         )
     return best
-
-
-# ---------------------------------------------------------------------------
-# Private helpers: mission batch execution + analysis assembly
-# ---------------------------------------------------------------------------
-
-
-def _execute_mission_batch(
-    client: ModelClient,
-    motifs: Sequence[Motif],
-    sharing_conditions: Sequence[str],
-    n_per_cell: int,
-    out_path: Path | str,
-    ledger: BudgetLedger,
-    model_pairs: dict[str, tuple[str, str]],
-    per_call_ceiling: float = 0.0,
-) -> list[MissionRecord]:
-    """Execute all missions and append each to the JSONL log.
-
-    Iterates over every ``(motif, condition)`` cell and runs *n_per_cell*
-    missions, logging each via :class:`~.logging_schema.JsonlLogger` and
-    accumulating API cost in *ledger*.  All missions use
-    :data:`~.tasks.TASK_LIBRARY[0]` as the task.
-
-    Returns the complete list of executed :class:`~.logging_schema.MissionRecord`
-    objects in execution order.
-    """
-    logger = JsonlLogger(out_path)
-    all_missions: list[MissionRecord] = []
-    task = TASK_LIBRARY[0]  # arith_add — DryRunClient returns its ground truth
-
-    # LLD-E §6.3: prospective worst-case budget gate before each batch of <=25.
-    # per_call_ceiling is 0.0 for $0 dry/local clients; a paid FrontierClient
-    # MUST pass config.PER_CALL_CEILING_USD so the $19.50 hard stop is live.
-    batch_size = 25
-    total = len(motifs) * len(sharing_conditions) * n_per_cell
-    issued = 0
-
-    for motif in motifs:
-        for condition in sharing_conditions:
-            model_a, model_b = model_pairs.get(
-                condition,
-                model_pairs.get("same_model", ("dry-run", "dry-run")),
-            )
-            assignment = _build_model_assignment(motif, model_a, model_b)
-            for i in range(n_per_cell):
-                if issued % batch_size == 0:
-                    upcoming = min(batch_size, total - issued)
-                    if not ledger.plan_batch(per_call_ceiling, upcoming):
-                        raise BudgetExceeded(
-                            f"Budget stop before batch: spent={ledger.spent:.6f} USD; "
-                            f"worst-case next {upcoming} calls at "
-                            f"{per_call_ceiling:.6f}/call would exceed the "
-                            f"{config.BUDGET_STOP_USD} USD hard stop."
-                        )
-                mission_id = f"mission-{motif.name}-{condition}-{i}"
-                cluster_id = f"cluster-{condition}-{i}"
-                record = run_mission(
-                    motif, task, assignment, client,
-                    sharing_condition=condition,
-                    cluster_id=cluster_id,
-                    mission_id=mission_id,
-                )
-                logger.append(record)
-                ledger.record(record.cost_usd)
-                issued += 1
-                all_missions.append(record)
-    return all_missions
 
 
 def _build_summary(
@@ -548,14 +463,29 @@ def run_experiment(
     ledger: BudgetLedger,
     model_pairs: dict[str, tuple[str, str]] | None = None,
     per_call_ceiling: float | None = None,
+    task_sampler: Callable[[str], Task] | None = None,
 ) -> ExperimentSummary:
     """Orchestrate the $20-capped validation experiment and return all reports.
 
     Runs every ``(motif, condition)`` cell *n_per_cell* times via *client*,
     logs each :class:`~.logging_schema.MissionRecord` to *out_path*, records
     spend in *ledger*, then computes and returns all four confirmatory analysis
-    reports as a frozen :class:`ExperimentSummary`.  All missions use
-    :data:`~.tasks.TASK_LIBRARY[0]` (``arith_add``).
+    reports as a frozen :class:`ExperimentSummary`.
+
+    Task sampling (LLD-F §A, §B)
+    ------------------------------
+    *task_sampler* maps each ``mission_id`` string to a :class:`~.tasks.Task`.
+    When ``None`` (the default), the tier is auto-detected:
+
+    - ``DryRunClient`` / ``LocalClient`` → :func:`_dry_task_sampler` (always
+      returns :data:`~.tasks.TASK_LIBRARY[0]`; compatible with the
+      :class:`DryRunClient` canned answer).
+    - Any other client (frontier adapter) → ``domain_task_sampler`` over
+      :data:`~.experiments.config.EXPERIMENT_DOMAINS`, which hashes
+      ``mission_id`` to a deterministic seed and generates a real domain task.
+
+    Pass *task_sampler* explicitly to override auto-detection (e.g., for a
+    custom task distribution in a preregistered variant).
 
     Model-pair selection and the §6.3 batch-gate ceiling are auto-detected from
     the client's tier via :func:`_resolve_run_tier` (dry/local → $0, no gate;
@@ -575,8 +505,29 @@ def run_experiment(
         model_pairs = resolved_pairs
     if per_call_ceiling is None:
         per_call_ceiling = resolved_ceiling
+
+    # --- Auto-resolve task_sampler from client tier -------------------------
+    if task_sampler is None:
+        if isinstance(client, DryRunClient):
+            task_sampler = _dry_task_sampler
+        else:
+            try:
+                from agentassert_abc.experiments.models import LocalClient  # noqa: PLC0415
+                is_local = isinstance(client, LocalClient)
+            except ImportError:
+                is_local = False
+            if is_local:
+                task_sampler = _dry_task_sampler
+            else:
+                # Frontier adapter: use domain-grounded missions.
+                from agentassert_abc.experiments.domains import (  # noqa: PLC0415
+                    domain_task_sampler,
+                )
+                task_sampler = domain_task_sampler(config.EXPERIMENT_DOMAINS)
+
     all_missions = _execute_mission_batch(
         client, motifs, sharing_conditions, n_per_cell, out_path, ledger, model_pairs,
+        task_sampler,
         per_call_ceiling=per_call_ceiling,
     )
     return _build_summary(all_missions, p0, alpha, ledger, out_path)

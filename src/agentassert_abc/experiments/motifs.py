@@ -78,7 +78,7 @@ from agentassert_abc.experiments.logging_schema import (
     HandoffRecord,
     MissionRecord,
 )
-from agentassert_abc.experiments.tasks import Task, score
+from agentassert_abc.experiments.tasks import Task, score, score_soft
 
 if TYPE_CHECKING:
     from agentassert_abc.experiments.models import ModelResponse
@@ -318,7 +318,7 @@ def _run_series(
         prompt = _build_prompt(task, node_id, context=prev_output)
         resp = client.generate(model, prompt)
         hard_ok = score(task, resp.text)
-        soft_ok = len(resp.text.strip()) > 0
+        soft_ok = score_soft(task, resp.text)
         comps[node_id] = _make_comp(
             node_id, resp, hard_ok=hard_ok, soft_ok=soft_ok, scored=True
         )
@@ -391,7 +391,7 @@ def _run_parallel_quorum(
         prompt = _build_prompt(task, node_id, context="")
         resp = client.generate(model, prompt)
         hard_ok = score(task, resp.text)
-        soft_ok = len(resp.text.strip()) > 0
+        soft_ok = score_soft(task, resp.text)
         branch_comps[node_id] = _make_comp(
             node_id, resp, hard_ok=hard_ok, soft_ok=soft_ok, scored=True
         )
@@ -491,7 +491,7 @@ def _run_hierarchy(
     comps[sup_id] = _make_comp(
         sup_id, resp_s,
         hard_ok=hard_ok_s,
-        soft_ok=len(resp_s.text.strip()) > 0,
+        soft_ok=score_soft(task, resp_s.text),
         scored=True,
     )
     total_tokens += resp_s.input_tokens + resp_s.output_tokens
@@ -506,7 +506,7 @@ def _run_hierarchy(
     comps[worker_id] = _make_comp(
         worker_id, resp_w,
         hard_ok=hard_ok_w,
-        soft_ok=len(resp_w.text.strip()) > 0,
+        soft_ok=score_soft(task, resp_w.text),
         scored=True,
     )
     total_tokens += resp_w.input_tokens + resp_w.output_tokens
@@ -521,7 +521,7 @@ def _run_hierarchy(
     comps[verifier_id] = _make_comp(
         verifier_id, resp_v,
         hard_ok=hard_ok_v,
-        soft_ok=len(resp_v.text.strip()) > 0,
+        soft_ok=score_soft(task, resp_v.text),
         scored=True,
     )
     total_tokens += resp_v.input_tokens + resp_v.output_tokens

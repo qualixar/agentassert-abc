@@ -65,7 +65,9 @@ from __future__ import annotations
 
 import json
 import os
+import random as _random
 import re
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -327,12 +329,23 @@ class _OpenAICompatBase:
             # GrokBridgeClient — subscription-backed local proxy, no auth header.
             self._transport = _make_http_transport()
 
-    def generate(self, model: str, prompt: str) -> ModelResponse:
+    def generate(
+        self,
+        model: str,
+        prompt: str,
+        *,
+        max_attempts: int = 2,
+    ) -> ModelResponse:
         """Call the provider and return a cost-annotated :class:`~.models.ModelResponse`.
 
         Args:
-            model:  Provider model identifier.
-            prompt: Raw text prompt.
+            model:        Provider model identifier.
+            prompt:       Raw text prompt.
+            max_attempts: Total call attempts (1 attempt + N-1 retries).
+                          Default ``2`` preserves the original one-retry
+                          behaviour (LLD-E §5.2).  Pass
+                          ``config.FRONTIER_MAX_RETRIES`` (4) for the
+                          crash-resistant multi-retry path (LLD-F §C).
 
         Returns:
             :class:`~.models.ModelResponse` with ``cost_usd`` from
@@ -342,9 +355,10 @@ class _OpenAICompatBase:
             FrontierDisabledError:   Gate is closed (``FRONTIER_ENABLED=False``).
             FrontierTokenCapError:   Response exceeded LLD-E §6.2 token caps.
             KeyError:                Malformed provider response.
-            ConnectionError:         Transport failure (after one retry).
-            RuntimeError:            HTTP 4xx/5xx from provider (after one retry
-                                     for 429/5xx; immediately for other codes).
+            ConnectionError:         Transport failure (after retries exhausted).
+            RuntimeError:            HTTP 4xx/5xx from provider (after retries
+                                     exhausted for 429/5xx; immediately for
+                                     other codes).
         """
         # --- GATE CHECK #2: belt-and-suspenders ----------------------------
         if not config.FRONTIER_ENABLED:
@@ -380,32 +394,54 @@ class _OpenAICompatBase:
                 "top_p": 1.0,                                     # LLD-E §5.1
             }
 
-        raw = self._call_with_one_retry(body)
+        raw = self._call_with_retries(body, max_attempts=max_attempts)
         return self._parse_response(raw, model)
 
-    def _call_with_one_retry(self, body: dict) -> dict:
-        """Execute the transport, retrying once on 429/5xx/transport error.
+    def _call_with_retries(self, body: dict, *, max_attempts: int = 2) -> dict:
+        """Execute the transport with retry on 429/5xx/transport errors.
 
-        LLD-E §5.2: one operational retry on transport errors, rate limits, or
-        provider 5xx responses.  Content failures are never retried.
+        Retries up to ``max_attempts`` total calls (1 attempt + up to
+        ``max_attempts - 1`` retries).  The default ``max_attempts=2``
+        reproduces the original one-retry behaviour (LLD-E §5.2).  Callers
+        that need full crash-resistant behaviour should pass
+        ``max_attempts=config.FRONTIER_MAX_RETRIES`` (default 4).
+
+        Backoff is exponential with small jitter only when ``max_attempts > 2``;
+        the 2-attempt (legacy) path has no sleep so existing tests run at full
+        speed.
 
         Args:
-            body: Request body dict.
+            body:         Request body dict.
+            max_attempts: Total call attempts (1 attempt + N-1 retries).
+                          Must be ≥ 1.
 
         Returns:
             Parsed response dict from the provider.
 
         Raises:
-            Any exception from the second attempt (non-retryable first
-            exceptions re-raise immediately).
+            ConnectionError / RuntimeError:
+                From the last retried attempt for retryable errors.
+            Any other exception:
+                Re-raised immediately (content failures are never retried).
         """
-        try:
-            return self._transport(self._endpoint, body)
-        except Exception as first_exc:
-            if not _is_retryable(first_exc):
-                raise
-            # One retry — the second exception propagates as-is.
-            return self._transport(self._endpoint, body)
+        last_exc: Exception | None = None
+        for attempt in range(max(1, max_attempts)):
+            try:
+                return self._transport(self._endpoint, body)
+            except Exception as exc:
+                if not _is_retryable(exc):
+                    raise
+                last_exc = exc
+                # Only sleep when running in multi-retry mode (max_attempts > 2).
+                # The 2-attempt (legacy) path has no delay so tests stay fast.
+                if max_attempts > 2 and attempt < max_attempts - 1:
+                    delay = (
+                        config.FRONTIER_BACKOFF_BASE_S * (2 ** attempt)
+                        + _random.uniform(0.0, 0.1)
+                    )
+                    time.sleep(delay)
+        # Last attempt exhausted — re-raise the stored exception.
+        raise last_exc  # type: ignore[misc]
 
     def _parse_response(self, raw: dict, model: str) -> ModelResponse:
         """Parse an OpenAI chat/completions response and return a ModelResponse.

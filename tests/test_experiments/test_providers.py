@@ -778,3 +778,113 @@ class TestResponsesShapeAndCost:
             p.OpenRouterClient(
                 transport=lambda url, body: payload  # noqa: ARG005
             ).generate(config.OPENROUTER_DEFAULT_MODEL, "test")
+
+
+# ---------------------------------------------------------------------------
+# TestMultiRetry (LLD-F §C.2)
+#
+# _call_with_retries with max_attempts > 2: backs off then succeeds on Nth
+# attempt; content error not retried in multi-retry mode.
+# ---------------------------------------------------------------------------
+
+
+class TestMultiRetry:
+    """LLD-F §C.2: _call_with_retries with max_attempts=4 (FRONTIER_MAX_RETRIES)."""
+
+    def test_succeeds_on_4th_attempt(self) -> None:
+        """Fails 3 times then succeeds on attempt 4 — all 4 calls must be made."""
+        p = _import_providers()
+        call_count = 0
+
+        def flaky_transport(url: str, body: dict) -> dict:  # noqa: ARG001
+            nonlocal call_count
+            call_count += 1
+            if call_count < 4:
+                raise RuntimeError(f"HTTP 429 from {url}: rate limited (call {call_count})")
+            return _chat_completions_payload(
+                text="succeeded on 4th", input_tokens=50, output_tokens=20
+            )
+
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key-or"}),
+        ):
+            client = p.OpenRouterClient(transport=flaky_transport)
+            resp = client.generate(
+                "qwen/qwen3-7b-fast", "test", max_attempts=config.FRONTIER_MAX_RETRIES
+            )
+
+        assert resp.text == "succeeded on 4th"
+        assert call_count == 4, (
+            f"Expected exactly 4 transport calls with max_attempts=4, got {call_count}."
+        )
+
+    def test_exhausted_after_max_attempts(self) -> None:
+        """Persistent failures raise after exactly max_attempts calls."""
+        p = _import_providers()
+        call_count = 0
+
+        def always_fail(url: str, body: dict) -> dict:  # noqa: ARG001
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError(f"HTTP 503 from {url}: service unavailable")
+
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key-or"}),
+            pytest.raises(RuntimeError, match="HTTP 503"),
+        ):
+            p.OpenRouterClient(transport=always_fail).generate(
+                "qwen/qwen3-7b-fast", "test", max_attempts=config.FRONTIER_MAX_RETRIES
+            )
+
+        assert call_count == config.FRONTIER_MAX_RETRIES, (
+            f"Expected {config.FRONTIER_MAX_RETRIES} transport calls, got {call_count}."
+        )
+
+    def test_content_error_not_retried_in_multi_retry_mode(self) -> None:
+        """KeyError (malformed payload) must propagate immediately — not retried."""
+        p = _import_providers()
+        call_count = 0
+
+        def bad_payload(url: str, body: dict) -> dict:  # noqa: ARG001
+            nonlocal call_count
+            call_count += 1
+            return {"usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key-or"}),
+            pytest.raises(KeyError),
+        ):
+            p.OpenRouterClient(transport=bad_payload).generate(
+                "qwen/qwen3-7b-fast", "test", max_attempts=config.FRONTIER_MAX_RETRIES
+            )
+
+        assert call_count == 1, (
+            f"Content failures (KeyError) must NOT be retried even with "
+            f"max_attempts={config.FRONTIER_MAX_RETRIES}. Got {call_count} calls."
+        )
+
+    def test_max_attempts_1_means_no_retry(self) -> None:
+        """max_attempts=1: a single failure must raise immediately without retry."""
+        p = _import_providers()
+        call_count = 0
+
+        def always_fail(url: str, body: dict) -> dict:  # noqa: ARG001
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("HTTP 500: error")
+
+        with (
+            patch.object(config, "FRONTIER_ENABLED", True),
+            patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key-or"}),
+            pytest.raises(RuntimeError),
+        ):
+            p.OpenRouterClient(transport=always_fail).generate(
+                "qwen/qwen3-7b-fast", "test", max_attempts=1
+            )
+
+        assert call_count == 1, (
+            f"max_attempts=1 must make exactly 1 call. Got {call_count}."
+        )

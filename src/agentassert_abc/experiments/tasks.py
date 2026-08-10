@@ -23,11 +23,32 @@ constants are needed — tasks are static, offline, and free to evaluate.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+# ---------------------------------------------------------------------------
+# Soft-scorer default (module-level named function — hashable + debuggable)
+# ---------------------------------------------------------------------------
+
+
+def _soft_nonempty(answer: str) -> bool:
+    """Default soft scorer: return True iff *answer* is non-empty.
+
+    Reproduces the pre-LLD-F behavior of ``len(text) > 0`` after extraction.
+    Defined at module level (not as a lambda) so it is hashable and has a
+    descriptive repr for debugging.
+
+    Args:
+        answer: The extracted (lower-cased, stripped) agent response.
+
+    Returns:
+        ``True`` when *answer* is non-empty.
+    """
+    return bool(answer)
+
 
 # ---------------------------------------------------------------------------
 # Core dataclass
@@ -40,19 +61,26 @@ class Task:
 
     All fields are immutable. ``scorer`` receives the output of
     :func:`extract_answer` — already stripped and lower-cased — and returns
-    ``True`` iff the answer is correct.
+    ``True`` iff the answer is correct.  ``soft_scorer`` applies a relaxed
+    structural check (e.g., all required JSON keys present) that is logged
+    separately but does not determine the primary outcome Y.
 
     Args:
         id: Unique snake_case identifier (e.g. ``"arith_add"``).
         prompt: The question presented to the agent.
         ground_truth: The canonical correct answer as a raw string.
         scorer: Pure function ``(extracted_answer: str) -> bool``.
+        domain: Domain label for domain-grounded missions (default ``"generic"``).
+        soft_scorer: Relaxed structural checker (default :func:`_soft_nonempty`).
+            Must be a pure deterministic function — never an LLM judge.
     """
 
     id: str
     prompt: str
     ground_truth: str
     scorer: Callable[[str], bool]
+    domain: str = "generic"
+    soft_scorer: Callable[[str], bool] = field(default=_soft_nonempty)
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +133,28 @@ def score(task: Task, raw_output: str) -> bool:
         ``True`` if the extracted answer passes the gold scorer.
     """
     return task.scorer(extract_answer(raw_output))
+
+
+def score_soft(task: Task, raw_output: str) -> bool:
+    """Apply the task's soft scorer to a raw agent output.
+
+    Extracts the answer with :func:`extract_answer` (strip, lower-case,
+    collapse whitespace) then delegates to ``task.soft_scorer``.  For tasks
+    from :data:`TASK_LIBRARY` the default soft scorer is :func:`_soft_nonempty`,
+    reproducing the pre-LLD-F ``len(text) > 0`` behavior.
+
+    For domain-grounded tasks (LLD-F §A.2) the soft scorer checks structural
+    correctness (e.g., all required JSON keys are present and numeric) without
+    verifying arithmetic precision — that is the HARD scorer's job.
+
+    Args:
+        task: The :class:`Task` whose soft_scorer to invoke.
+        raw_output: Unprocessed string from the agent.
+
+    Returns:
+        ``True`` if the extracted answer passes the soft structural check.
+    """
+    return task.soft_scorer(extract_answer(raw_output))
 
 
 # ---------------------------------------------------------------------------
