@@ -344,10 +344,11 @@ def build_client(condition: str, tier: str) -> ModelClient:
         # Unknown condition → ValueError BEFORE any adapter construction.
         if condition in ("same_model", "same_vendor", "different_vendor"):
             return providers.OpenRouterClient()
-        if condition == "different_vendor_meta":
-            return providers.MetaSparkClient()
-        if condition == "different_vendor_grok":
-            return providers.GrokBridgeClient()
+        # Cross-backend arms: the model pair spans providers (e.g. a Meta model
+        # on one leg, an OpenRouter model on the other), so a single-backend
+        # client cannot serve both legs. RoutingClient dispatches per model id.
+        if condition in ("different_vendor_meta", "different_vendor_grok"):
+            return providers.RoutingClient()
         valid = sorted(_FRONTIER_CONDITIONS)
         raise ValueError(
             f"Unknown frontier condition {condition!r}. "

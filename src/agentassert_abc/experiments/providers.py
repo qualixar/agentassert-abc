@@ -88,6 +88,7 @@ __all__ = [
     "GrokBridgeClient",
     "MetaSparkClient",
     "OpenRouterClient",
+    "RoutingClient",
 ]
 
 # Re-export so callers only need one import.
@@ -669,3 +670,73 @@ class GrokBridgeClient(_OpenAICompatBase):
             price_key="grok_bridge",
             transport=transport,
         )
+
+
+# ---------------------------------------------------------------------------
+# RoutingClient — cross-backend dispatch by model id
+# ---------------------------------------------------------------------------
+
+
+class RoutingClient:
+    """Route ``generate(model, prompt)`` to the right backend by model id.
+
+    Enables cross-backend sharing conditions where a mission's two legs live on
+    DIFFERENT providers (e.g. a Meta Spark model on leg A, an OpenRouter model
+    on leg B).  ``build_client`` returns one client per condition, so a single
+    backend client cannot serve such a heterogeneous pair — this router can.
+
+    Routing by model-id prefix:
+      * ``muse*`` → :class:`MetaSparkClient`   (Meta ``/v1/responses``)
+      * ``grok*`` → :class:`GrokBridgeClient`  (local hermes proxy)
+      * otherwise → :class:`OpenRouterClient`
+
+    Sub-clients are built lazily (only the backends actually used are
+    constructed) and each enforces its own gate + credential check.  The router
+    ALSO checks the frontier gate eagerly at construction, so it fails fast like
+    every other adapter (``FrontierDisabledError`` when the gate is closed).
+
+    Satisfies the :class:`~agentassert_abc.experiments.motifs.ModelClient`
+    protocol via duck typing.
+
+    Args:
+        transports: Optional ``{"meta"|"grok"|"openrouter": Transport}`` mapping
+            for testing without real sockets.
+
+    Raises:
+        FrontierDisabledError: ``config.FRONTIER_ENABLED`` is ``False``.
+    """
+
+    __slots__ = ("_grok", "_meta", "_openrouter", "_transports")
+
+    def __init__(self, transports: dict[str, Transport] | None = None) -> None:
+        # --- GATE CHECK: fail fast at construction (parity with adapters) ----
+        if not config.FRONTIER_ENABLED:
+            raise FrontierDisabledError(
+                "Frontier API calls are disabled (FRONTIER_ENABLED is False). "
+                "No network request has been made."
+            )
+        self._transports: dict[str, Transport] = transports or {}
+        self._meta: MetaSparkClient | None = None
+        self._grok: GrokBridgeClient | None = None
+        self._openrouter: OpenRouterClient | None = None
+
+    def _route(self, model: str) -> _OpenAICompatBase:
+        """Return the backend adapter for *model* (lazily constructed)."""
+        low = model.lower()
+        if low.startswith("muse"):
+            if self._meta is None:
+                self._meta = MetaSparkClient(transport=self._transports.get("meta"))
+            return self._meta
+        if low.startswith("grok"):
+            if self._grok is None:
+                self._grok = GrokBridgeClient(transport=self._transports.get("grok"))
+            return self._grok
+        if self._openrouter is None:
+            self._openrouter = OpenRouterClient(
+                transport=self._transports.get("openrouter")
+            )
+        return self._openrouter
+
+    def generate(self, model: str, prompt: str) -> ModelResponse:
+        """Delegate to the backend adapter selected by *model*'s id prefix."""
+        return self._route(model).generate(model, prompt)
