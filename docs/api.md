@@ -27,7 +27,7 @@ import agentassert_abc as aa
 | Symbol | Description |
 |--------|-------------|
 | `aa.evaluate(contract, state)` | Evaluate a state dict against a contract. Returns `EvaluationResult`. |
-| `aa.evaluate_preconditions(contract, state)` | Check preconditions only. Returns `PreconditionCheckResult`. |
+| `aa.evaluate_preconditions(contract, state)` | Check preconditions only. Returns `list[ConstraintResult]`. |
 
 ### Session Monitoring
 
@@ -111,6 +111,6 @@ Heavy dependencies (scipy, numpy, ruamel-yaml) are lazy-loaded. The initial `imp
 
 - `aa.load()` / `aa.loads()` -- triggers ruamel-yaml import
 - `aa.SessionMonitor` / `aa.compute_theta()` -- triggers scipy/numpy import
-- `aa.SPRTCertifier` -- triggers scipy import
+- `aa.SPRTCertifier` -- pure Python stdlib (math only), no additional imports
 
 This means you can `import agentassert_abc` in any project without paying the import cost for features you do not use.

@@ -15,11 +15,14 @@ Patent reference: arXiv:2602.22302, TECHNICAL-ATTACHMENT.md §5.5, F5.
 from __future__ import annotations
 
 import math
+import types
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from agentassert_abc.models import ContractSpec
 
 
@@ -49,11 +52,17 @@ class CompositionResult:
     """Aggregated result of checking all C1-C5 conditions + bound."""
 
     bound: float                              # p_a * p_b * p_h
-    conditions: dict[str, ConditionResult] = field(default_factory=dict)
+    # Ledger 3d: declared as Mapping so callers accept MappingProxyType; never mutable
+    conditions: Mapping[str, ConditionResult] = field(default_factory=dict)
     all_hold: bool = False
     safety_label: str = ""
 
     def __post_init__(self) -> None:
+        # Ledger 3d: wrap conditions in MappingProxyType so mutations (which would
+        # silently make all_hold/safety_label stale) are caught at the call site.
+        object.__setattr__(
+            self, 'conditions', types.MappingProxyType(dict(self.conditions))
+        )
         # Auto-calculate derived fields
         object.__setattr__(self, 'all_hold', all(c for c in self.conditions.values()))
         object.__setattr__(
@@ -296,13 +305,23 @@ def check_c3_monotone_drift(
 
     failing = 0
     total = len(drift_a)
+
+    # Ledger 2g: sequences shorter than 20 are too short for meaningful drift analysis;
+    # max(1, int(total*0.05))=1 makes even 1-element sequences vacuously HOLD.
+    if total < 20:
+        return ConditionResult(
+            verdict=ConditionVerdict.INCONCLUSIVE,
+            reason=f"Drift sequence too short for analysis ({total} < 20 minimum)",
+            evidence={"failing_timesteps": 0},
+        )
+
     for da, db, dc in zip(drift_a, drift_b, drift_combined, strict=True):
         if dc > max(da, db) + _EPSILON:
             failing += 1
 
-    # Allow up of 5% of timesteps to fail (grace threshold)
-    threshold = max(1, int(total * 0.05))
-    if failing <= threshold:
+    # Allow up to 5% of timesteps to fail (grace threshold); no min-1 clamp
+    grace = int(total * 0.05)
+    if failing <= grace:
         return ConditionResult(
             verdict=ConditionVerdict.HOLDS,
             reason=f"Combined drift within tolerance at {total - failing}/{total} timesteps",
@@ -347,9 +366,11 @@ def check_c4_recovery_propagation(
         if agent == "agent_a" and evt_type == "recovery_attempt":
             upstream_recoveries[turn] = False  # Mark as needing downstream observation
         elif agent == "agent_b" and evt_type == "recovery_success":
-            # Check if there's an upstream recovery at this turn or turn-1
+            # Ledger 2a: downstream recovery must FOLLOW upstream attempt (causal).
+            # abs() counted acausal recoveries (B success BEFORE A attempt);
+            # correct: B success must be at recovery_turn or recovery_turn+1.
             for recovery_turn in list(upstream_recoveries.keys()):
-                if not upstream_recoveries[recovery_turn] and abs(turn - recovery_turn) <= 1:
+                if not upstream_recoveries[recovery_turn] and 0 <= turn - recovery_turn <= 1:
                     upstream_recoveries[recovery_turn] = True
 
     # Find unpropagated recoveries
@@ -424,11 +445,14 @@ def check_c5_independence(
             evidence={"p_b_violates": 0.0, "p_b_given_a_prev": 0.0},
         )
 
-    # P(B) = B violations / total turns
-    p_b = len(b_violations) / max_turn if max_turn > 0 else 0.0
+    # Ledger 2b: turns are 0-indexed so the count is max_turn+1, not max_turn.
+    # Using max_turn as denominator caused p_b=0 when all events on turn 0.
+    p_b = len(b_violations) / (max_turn + 1)
 
-    # P(B | A_prev) = B violations in A_prev turns / A_prev turns
-    a_prev = {t - 1 for t in a_violations if t > 1}
+    # P(B | A_prev) = P(B violates at t | A violated at the previous turn t-1).
+    # Candidate turns are those whose PRECEDING turn had an A violation: {a+1}.
+    # (Previously {a-1}, which tested whether B *leads* A — the reverse of A->B causation.)
+    a_prev = {t + 1 for t in a_violations if t + 1 <= max_turn}
     if not a_prev:
         p_b_given_a = 0.0
     else:

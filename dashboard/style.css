@@ -1,0 +1,239 @@
+/* AgentAssert Dashboard — style.css
+   Zero-dependency, offline-safe. System fonts only. */
+
+/* ── CSS variables ─────────────────────────────────────────────── */
+:root {
+  --bg:        #0f172a;
+  --bg-card:   #1e293b;
+  --bg-card2:  #263248;
+  --border:    #334155;
+  --text:      #f1f5f9;
+  --text-dim:  #94a3b8;
+  --text-inv:  #0f172a;
+  --green:     #22c55e;
+  --green-bg:  #14532d;
+  --red:       #ef4444;
+  --red-bg:    #7f1d1d;
+  --blue:      #3b82f6;
+  --blue-dim:  #1e3a5f;
+  --yellow:    #eab308;
+  --yellow-bg: #713f12;
+  --radius:    8px;
+  --shadow:    0 2px 12px rgba(0,0,0,.4);
+}
+
+/* ── Reset / base ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+               sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+
+h1, h2, h3 { line-height: 1.25; }
+h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: .55rem; }
+small.dim { font-size: .8rem; color: var(--text-dim); font-weight: 400; }
+pre { font-family: "SFMono-Regular", Consolas, monospace; }
+
+/* ── Layout ────────────────────────────────────────────────────── */
+.site-header {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  padding: .9rem 1.5rem;
+}
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.site-title   { font-size: 1.2rem; font-weight: 700; color: var(--text); }
+.site-subtitle { font-size: .8rem; color: var(--text-dim); margin-top: 2px; }
+
+main, .no-data {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.2rem 1.5rem;
+}
+
+.hidden { display: none !important; }
+
+/* ── No-data message ───────────────────────────────────────────── */
+.no-data {
+  margin-top: 3rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+  text-align: center;
+}
+.no-data pre {
+  margin: 1rem auto 0;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 1rem;
+  display: inline-block;
+  text-align: left;
+  font-size: .8rem;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+/* ── KPI cards ─────────────────────────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .9rem 1rem;
+  box-shadow: var(--shadow);
+}
+.kpi-label { font-size: .72rem; text-transform: uppercase;
+             letter-spacing: .06em; color: var(--text-dim); }
+.kpi-value { font-size: 1.7rem; font-weight: 700; margin-top: .15rem;
+             line-height: 1; }
+.kpi-sub   { font-size: .75rem; color: var(--text-dim); margin-top: .2rem; }
+.kpi-green { color: var(--green); }
+.kpi-red   { color: var(--red); }
+.kpi-blue  { color: var(--blue); }
+.kpi-yellow{ color: var(--yellow); }
+
+/* ── Section cards ─────────────────────────────────────────────── */
+.dash-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow);
+}
+.section-desc { font-size: .78rem; color: var(--text-dim); margin-bottom: .75rem; }
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0;
+}
+@media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ── Chart wrappers ────────────────────────────────────────────── */
+.chart-wrapper { position: relative; }
+#eprocess-canvas { width: 100%; height: 260px; display: block;
+                   border-radius: 4px; background: var(--bg); }
+.comp-svg { width: 100%; height: 120px; display: block; }
+
+/* ── Stats row ─────────────────────────────────────────────────── */
+.stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem .75rem;
+  margin-top: .75rem;
+  font-size: .78rem;
+}
+.stat-chip {
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: .2rem .55rem;
+  color: var(--text-dim);
+}
+.stat-chip span { color: var(--text); font-weight: 600; }
+
+/* ── Badges ────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: .2rem .6rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.cert-badge { font-size: .85rem; padding: .35rem .9rem; }
+.badge-green  { background: var(--green-bg);  color: var(--green); }
+.badge-red    { background: var(--red-bg);    color: var(--red); }
+.badge-yellow { background: var(--yellow-bg); color: var(--yellow); }
+.badge-blue   { background: var(--blue-dim);  color: var(--blue); }
+
+/* ── 2×2 contingency table ─────────────────────────────────────── */
+.cofail-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: .5rem 0;
+  font-size: .82rem;
+}
+.cofail-table th, .cofail-table td {
+  border: 1px solid var(--border);
+  padding: .4rem .6rem;
+  text-align: center;
+}
+.cofail-table th { background: var(--bg-card2); color: var(--text-dim);
+                   font-size: .72rem; text-transform: uppercase; }
+.cofail-table .cell-n11 { background: #3b0f0f; color: var(--red); font-weight: 700; }
+.cofail-table .cell-n10, .cofail-table .cell-n01 { background: #1c1a07; color: var(--yellow); }
+.cofail-table .cell-n00 { background: #0a2e14; color: var(--green); font-weight: 700; }
+
+/* ── τ_a CI bar ─────────────────────────────────────────────────── */
+.tau-ci-section { margin-top: .6rem; }
+.tau-ci-label { font-size: .75rem; color: var(--text-dim); margin-bottom: .3rem; }
+.tau-ci-bar-wrap {
+  position: relative;
+  height: 24px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tau-ci-range { position: absolute; height: 100%; background: var(--blue-dim); }
+.tau-ci-point {
+  position: absolute;
+  width: 2px;
+  height: 100%;
+  background: var(--blue);
+}
+.tau-ci-zero {
+  position: absolute;
+  width: 1px;
+  height: 100%;
+  background: var(--border);
+}
+.tau-axis { display: flex; justify-content: space-between;
+            font-size: .68rem; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Drift agent table ─────────────────────────────────────────── */
+.drift-table { width: 100%; border-collapse: collapse;
+               margin-top: .5rem; font-size: .8rem; }
+.drift-table th, .drift-table td {
+  border: 1px solid var(--border);
+  padding: .35rem .6rem;
+  text-align: left;
+}
+.drift-table th { background: var(--bg-card2); color: var(--text-dim);
+                  font-size: .72rem; text-transform: uppercase; }
+
+/* ── Breakdown bars ─────────────────────────────────────────────── */
+.breakdown-group { margin-bottom: .8rem; }
+.breakdown-label { font-size: .75rem; color: var(--text-dim);
+                   text-transform: uppercase; letter-spacing: .05em;
+                   margin-bottom: .3rem; }
+.bar-row { display: flex; align-items: center; gap: .5rem;
+           margin-bottom: .3rem; font-size: .78rem; }
+.bar-key  { width: 120px; flex-shrink: 0; color: var(--text); overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; }
+.bar-bg   { flex: 1; height: 14px; background: var(--bg);
+            border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; background: var(--blue);
+            transition: width .3s ease; }
+.bar-pct  { width: 42px; text-align: right; color: var(--text-dim); flex-shrink: 0; }

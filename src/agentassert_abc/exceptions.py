@@ -47,3 +47,12 @@ class StateExtractionError(AgentAssertError, TypeError):
     Inherits from both AgentAssertError (for uniform catching) and
     TypeError (for backward compatibility).
     """
+
+
+class DependenceError(AgentAssertError):
+    """Invalid input to a dependence estimator, or an underidentified model.
+
+    Raised e.g. for mismatched paired lengths, out-of-range (eps, alpha),
+    degenerate marginals, or a one-factor model with fewer than 3 indicators
+    (loadings are not identified with only 2 indicators — LLD-E pre-lock fix).
+    """

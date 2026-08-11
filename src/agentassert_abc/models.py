@@ -14,9 +14,10 @@ Patent reference: arXiv:2602.22302, TECHNICAL-ATTACHMENT.md §4-§5
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _FrozenModel(BaseModel):
@@ -31,8 +32,8 @@ class _FrozenModel(BaseModel):
 class ConstraintCheck(_FrozenModel):
     """Single constraint check: field + operator + value.
 
-    Exactly one operator should be set per check.
-    Validation of "exactly one operator" is deferred to Phase 1 (DSL parser).
+    Exactly one of the 14 operator fields must be set. Validated at construction
+    time by the model_validator below (Ledger 3b).
     """
 
     field: str
@@ -50,6 +51,29 @@ class ConstraintCheck(_FrozenModel):
     exists: bool | None = None
     expr: str | None = None
     between: tuple[float, float] | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_operator(self) -> ConstraintCheck:
+        """Ledger 3b: exactly one of the 14 operators must be non-None."""
+        ops = [
+            self.equals, self.not_equals, self.gt, self.gte,
+            self.lt, self.lte, self.in_, self.not_in,
+            self.contains, self.not_contains, self.matches,
+            self.exists, self.expr, self.between,
+        ]
+        non_none = sum(1 for op in ops if op is not None)
+        if non_none == 0:
+            raise ValueError(
+                "ConstraintCheck must have exactly one operator set; none were set. "
+                "Add one of: equals, not_equals, gt, gte, lt, lte, in, not_in, "
+                "contains, not_contains, matches, exists, expr, between."
+            )
+        if non_none > 1:
+            raise ValueError(
+                f"ConstraintCheck must have exactly one operator set; {non_none} were set. "
+                "Remove the extra operators."
+            )
+        return self
 
 
 # --- Constraints (§4.2 — Hard/Soft separation) ---
@@ -166,8 +190,8 @@ class SatisfactionParams(_FrozenModel):
     """
 
     p: float = Field(0.95, ge=0.0, le=1.0)
-    delta: float = Field(0.1, gt=0.0, le=1.0)
-    k: int = Field(3, ge=1, le=1000)
+    delta: float = Field(0.1, ge=0.0, le=1.0)  # δ=0 allowed (LLD-A §18-14 degenerate)
+    k: int = Field(3, ge=0, le=1000)  # k=0 allowed (recover at onset turn)
 
 
 # --- Drift Configuration (§5.1) ---
@@ -176,11 +200,22 @@ class SatisfactionParams(_FrozenModel):
 class DriftWeights(_FrozenModel):
     """Drift metric weights: D(t) = w_c × D_compliance + w_d × D_distributional.
 
-    Patent defaults: compliance=0.6, distributional=0.4.
+    Patent defaults: compliance=0.6, distributional=0.4. Weights must sum to 1.0.
     """
 
     compliance: float = Field(0.6, ge=0.0, le=1.0)
     distributional: float = Field(0.4, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _weights_sum_to_one(self) -> DriftWeights:
+        """Ledger 3a: HARD-FAIL if weights do not sum to 1.0."""
+        total = self.compliance + self.distributional
+        if not math.isclose(total, 1.0, rel_tol=1e-6, abs_tol=1e-9):
+            raise ValueError(
+                f"DriftWeights must sum to 1.0, got {total:.6f} "
+                f"(compliance={self.compliance}, distributional={self.distributional})"
+            )
+        return self
 
 
 class DriftThresholds(_FrozenModel):
@@ -211,13 +246,25 @@ class ReliabilityWeights(_FrozenModel):
     - recovery_success (0.20): How effectively the agent recovers — S
 
     M-16: Aliases 'recovery' and 'stress' accepted for backward compat
-    with patent YAML example which uses those names.
+    with patent YAML example which uses those names. Weights must sum to 1.0.
     """
 
     compliance: float = Field(0.35, ge=0.0, le=1.0)
     drift: float = Field(0.25, ge=0.0, le=1.0)
     event_freq: float = Field(0.20, ge=0.0, le=1.0, alias="stress")
     recovery_success: float = Field(0.20, ge=0.0, le=1.0, alias="recovery")
+
+    @model_validator(mode="after")
+    def _weights_sum_to_one(self) -> ReliabilityWeights:
+        """Ledger 3a: HARD-FAIL if weights do not sum to 1.0."""
+        total = self.compliance + self.drift + self.event_freq + self.recovery_success
+        if not math.isclose(total, 1.0, rel_tol=1e-6, abs_tol=1e-9):
+            raise ValueError(
+                f"ReliabilityWeights must sum to 1.0, got {total:.6f} "
+                f"(compliance={self.compliance}, drift={self.drift}, "
+                f"event_freq={self.event_freq}, recovery_success={self.recovery_success})"
+            )
+        return self
 
 
 class ReliabilityConfig(_FrozenModel):

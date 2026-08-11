@@ -16,13 +16,16 @@ Patent reference: TECHNICAL-ATTACHMENT.md §5.2-5.4.
 from __future__ import annotations
 
 import contextlib
+import logging
 import threading
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Callable  # noqa: TC003
+
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Event types
@@ -56,7 +59,8 @@ class ViolationEvent:
         timestamp: Unix epoch float (monotonic for within-session).
     """
 
-    kind: str = "violation"
+    # Ledger 3e: Literal kind narrows the type and prevents mis-routing events
+    kind: Literal["violation"] = "violation"
     constraint_name: str = ""
     constraint_type: str = ""
     field: str = ""
@@ -80,7 +84,8 @@ class RecoveryEvent:
         timestamp: Unix epoch float.
     """
 
-    kind: str = "recovery"
+    # Ledger 3e: Literal kind narrows the type and prevents mis-routing events
+    kind: Literal["recovery"] = "recovery"
     constraint_name: str = ""
     strategy: str = ""
     succeeded: bool = False
@@ -102,7 +107,8 @@ class DriftWarningEvent:
         timestamp: Unix epoch float.
     """
 
-    kind: str = "drift_warning"
+    # Ledger 3e: Literal kind narrows the type and prevents mis-routing events
+    kind: Literal["drift_warning"] = "drift_warning"
     level: str = ""
     drift_score: float = 0.0
     threshold: float = 0.0
@@ -125,7 +131,8 @@ class SessionSummaryEvent:
         timestamp: Unix epoch float.
     """
 
-    kind: str = "session_summary"
+    # Ledger 3e: Literal kind narrows the type and prevents mis-routing events
+    kind: Literal["session_summary"] = "session_summary"
     theta: float = 0.0
     c_bar: float = 0.0
     d_bar: float = 0.0
@@ -206,10 +213,16 @@ class EventBus:
         with self._lock:
             callbacks = list(self._subscribers.get(EventKind(event.kind), []))
         for cb in callbacks:
-            try:  # noqa: SIM105
+            try:
                 cb(event)
             except Exception:
-                pass  # swallow — one subscriber crash must not break others
+                # Ledger 5a: log instead of silently swallowing; one subscriber
+                # crash must not break others, but it should be observable.
+                _logger.exception(
+                    "EventBus subscriber %r raised while handling %r",
+                    cb,
+                    type(event).__name__,
+                )
 
     def clear(self) -> None:
         """Remove all subscribers. Thread-safe."""

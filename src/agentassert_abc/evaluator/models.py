@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ConstraintResult(BaseModel):
@@ -31,7 +31,8 @@ class EvaluationResult(BaseModel):
     hard_results: list[ConstraintResult] = []
     soft_results: list[ConstraintResult] = []
     governance_results: list[ConstraintResult] = []
-    c_hard: float = 1.0
-    c_soft: float = 1.0
+    # Ledger 3c: compliance scores are fractions in [0, 1]; reject out-of-range inputs.
+    c_hard: float = Field(1.0, ge=0.0, le=1.0)
+    c_soft: float = Field(1.0, ge=0.0, le=1.0)
     hard_violations: list[ConstraintResult] = []
     soft_violations: list[ConstraintResult] = []

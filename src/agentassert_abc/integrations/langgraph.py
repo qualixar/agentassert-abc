@@ -35,12 +35,15 @@ from __future__ import annotations
 import asyncio
 import copy
 import inspect
+import logging
 import threading
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from agentassert_abc.exceptions import ContractBreachError
 from agentassert_abc.monitor.session import SessionMonitor
+
+_logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -143,14 +146,22 @@ class LangGraphAdapter:
         with self._lock:
             step_result = self._monitor.step(flat_state)
 
-        if raise_on_hard and step_result.hard_violations > 0:
+        if step_result.hard_violations > 0:
+            # Ledger 5b: log hard violations before raising (or when raise_on_hard=False)
             violated = ", ".join(step_result.violated_names)
-            msg = (
-                f"Hard contract breach in LangGraph node "
-                f"'{node_name}': {step_result.hard_violations} "
-                f"violation(s) [{violated}]"
+            _logger.error(
+                "Hard contract breach in LangGraph node '%s': %d violation(s) [%s]",
+                node_name,
+                step_result.hard_violations,
+                violated,
             )
-            raise ContractBreachError(msg)
+            if raise_on_hard:
+                msg = (
+                    f"Hard contract breach in LangGraph node "
+                    f"'{node_name}': {step_result.hard_violations} "
+                    f"violation(s) [{violated}]"
+                )
+                raise ContractBreachError(msg)
 
     def wrap_graph(self, compiled_graph: Any) -> _MonitoredGraph:
         """Wrap a compiled LangGraph to monitor all invocations.
@@ -207,6 +218,20 @@ class LangGraphAdapter:
             is_command = isinstance(node_result, Command)
             if is_command and getattr(node_result, "update", None):
                 merged.update(node_result.update)
+            elif not is_command:
+                # Ledger 5b: non-dict, non-Command output is not monitorable.
+                _logger.warning(
+                    "LangGraph node returned non-dict non-Command result "
+                    "(%s); monitoring pre-state only.",
+                    type(node_result).__name__,
+                )
+        else:
+            # Ledger 5b: LangGraph not installed; log non-dict output.
+            _logger.warning(
+                "LangGraph node returned non-dict result (%s); "
+                "monitoring pre-state only.",
+                type(node_result).__name__,
+            )
 
         return merged
 

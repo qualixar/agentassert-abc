@@ -128,12 +128,12 @@ You can also compute Theta outside of a session:
 ```python
 from agentassert_abc import compute_theta
 
+# Ledger 6a: correct parameter names per theta.py signature.
 theta = compute_theta(
-    compliance=0.96,
-    drift=0.05,
-    recovery=0.90,
-    stress=0.85,
-    weights={"compliance": 0.35, "drift": 0.25, "recovery": 0.20, "stress": 0.20},
+    c_bar=0.96,          # mean compliance score
+    d_bar=0.05,          # mean drift score
+    events=3,            # total violation event count (int)
+    recovery_rate=0.90,  # fraction of recoveries that succeeded
 )
 print(f"Theta: {theta:.3f}")
 ```

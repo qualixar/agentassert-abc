@@ -4,6 +4,47 @@ All notable changes to `agentassert-abc` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-08-11
+
+### Added
+
+- **Dependence-aware compositional reliability certificate** — a tiered certificate that
+  does **not** assume stage-failure independence (condition C5):
+  - **Tier 0** — exact Clopper–Pearson lower bound on the directly observed all-success /
+    κ-of-m quorum event, plus a design-effect-adjusted floor
+    (`certification/observed_floor.py`).
+  - **Tier 1** — copula-agnostic linear-program bound over the Fréchet identification set
+    that tightens as co-execution moments are supplied (`certification/lp_bound.py`).
+  - **Tier 2** — Slepian monotone-corner Gaussian model floor, retained as a **diagnostic
+    only** (`certification/slepian_floor.py`).
+- **Dependence estimators** — failure-set overlap (Jaccard), Kendall τ_a with its ceiling
+  ratio, tetrachoric correlation, and a co-failure table (`dependence/estimators.py`), with
+  a bootstrap-CI module.
+- **Graph e-process certification** — anytime-valid sequential certification
+  (`certification/eprocess.py`) and factor-reliability machinery
+  (`certification/factor_reliability.py`).
+- **Jacobi bounded-drift analysis** in the metrics layer.
+- **Experiment harness** — a bounded-concurrency, budget-gated runner (~7× faster) with real
+  retail and financial domain missions, a cross-backend `RoutingClient`, and a
+  preregistration (`PREREGISTRATION.md`).
+- **Results dashboard** (`dashboard/`) — self-contained HTML view of composition,
+  certification, and dependence results.
+
+### Changed
+
+- Hardened contracts, certification, drift, and experiment-safety paths.
+
+### Fixed
+
+- Corrected the temporal direction of the C5 (stage-failure independence) check.
+
+### Notes
+
+- Companion paper (v2): *Agent Behavioral Contracts II: Certifying Compositional Reliability
+  Without Assuming Independence* — Zenodo DOI **10.5281/zenodo.21888041**. The v1 framework
+  and its 1,980-session evaluation remain at **arXiv:2602.22302**. With the v1 patent claim
+  withdrawn, all formulas are now disclosed.
+
 ## [0.3.0] — 2026-05-24
 
 ### Added

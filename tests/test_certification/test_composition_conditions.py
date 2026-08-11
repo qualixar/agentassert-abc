@@ -265,11 +265,16 @@ class TestC3MonotoneDrift:
     """C3 — Monotone Drift (DYNAMIC)."""
 
     def test_holds_when_combined_under_max(self) -> None:
-        """Combined drift stays within max(drift_a, drift_b) + epsilon."""
-        drift_a = [0.1, 0.2, 0.3, 0.15, 0.25]
-        drift_b = [0.15, 0.1, 0.25, 0.2, 0.1]
-        # Combined is always <= max(a, b)
-        drift_combined = [0.12, 0.18, 0.28, 0.17, 0.22]
+        """Combined drift stays within max(drift_a, drift_b) + epsilon.
+
+        Ledger 2g: sequences shorter than 20 are now INCONCLUSIVE; use 20
+        elements so this test exercises the actual HOLDS path.
+        """
+        # Ledger 2g: repeat 5-element pattern x4 to satisfy the >=20 minimum
+        drift_a = [0.1, 0.2, 0.3, 0.15, 0.25] * 4       # 20 elements
+        drift_b = [0.15, 0.1, 0.25, 0.2, 0.1] * 4
+        # Combined is always <= max(a, b) at every timestep
+        drift_combined = [0.12, 0.18, 0.28, 0.17, 0.22] * 4
 
         result = check_c3_monotone_drift(drift_a, drift_b, drift_combined)
         assert result.verdict == ConditionVerdict.HOLDS
@@ -472,6 +477,27 @@ class TestC5Independence:
         assert result.verdict == ConditionVerdict.FAILS
         assert abs(result.evidence["p_b_violates"] - result.evidence["p_b_given_a_prev"]) > 0.1
 
+    def test_fails_when_a_causes_b_next_turn(self) -> None:
+        """Regression (N3): A causing B one turn later must FAIL, not HOLD.
+
+        The original check used {t-1} (the turn *before* each A violation),
+        which measures whether B *leads* A — the reverse of an A->B pipeline.
+        A sparse perfect A->B causation therefore slipped through as HOLDS.
+        The correct check conditions on {t+1}.
+        """
+        log = [
+            {"agent": "agent_a", "event": "hard_violation", "turn": 10},
+            {"agent": "agent_b", "event": "hard_violation", "turn": 11},  # B follows A at t+1
+        ]
+        # Filler soft events clear the >=10-event floor and set max_turn=20.
+        for t in (1, 2, 3, 4, 5, 6, 7, 20):
+            log.append({"agent": "agent_a", "event": "soft_violation", "turn": t})
+
+        result = check_c5_independence(log)
+        # Correct semantics: P(B|A_prev)=1.0 vs P(B)=0.05 -> diff 0.95 -> FAILS.
+        assert result.verdict == ConditionVerdict.FAILS
+        assert result.evidence["p_b_given_a_prev"] == pytest.approx(1.0)
+
     def test_inconclusive_with_short_log(self) -> None:
         """Fewer than 10 events -> INCONCLUSIVE."""
         log = [
@@ -558,27 +584,21 @@ class TestComposeGuaranteesWithConditions:
 
         # Event log where C4 and C5 hold
         # C4: upstream recovery at turn 5, downstream observes at turn 5
-        # C5: A violates at 3,6,9,12,15,18. A_prev = {2,5,8,11,14,17}
-        #     B violates at 2,8,14,17,19 (proportional: 4/6 in A_prev ≈ 5/20 overall)
-        #     P(B) = 5/20 = 0.25. P(B|A_prev) = 4/6 ≈ 0.667. diff too high.
-        #     Need P(B|A) ≈ P(B). A_prev = {2,5,8,11,14,17} (6 turns).
-        #     If P(B) = 0.25, B should violate in ~1.5 of A_prev turns.
-        #     B violates at 2,8 (in A_prev) + 1,7,13 (outside) = 5 total
-        #     P(B) = 5/20 = 0.25. P(B|A_prev) = 2/6 ≈ 0.333. diff ≈ 0.083 <= 0.1
+        # C5 (correct {t+1} semantics): A hard@4,8,12,16 -> A_prev = {5,9,13,17}.
+        #     B hard@1,2,5,10,20 -> B ∩ A_prev = {5} = 1.
+        #     P(B) = 5/20 = 0.25, P(B|A_prev) = 1/4 = 0.25, diff = 0 -> HOLDS.
         log = [
             {"agent": "agent_a", "event": "recovery_attempt", "turn": 5},
             {"agent": "agent_b", "event": "recovery_success", "turn": 5},
-            {"agent": "agent_a", "event": "hard_violation", "turn": 3},
-            {"agent": "agent_a", "event": "hard_violation", "turn": 6},
-            {"agent": "agent_a", "event": "hard_violation", "turn": 9},
+            {"agent": "agent_a", "event": "hard_violation", "turn": 4},
+            {"agent": "agent_a", "event": "hard_violation", "turn": 8},
             {"agent": "agent_a", "event": "hard_violation", "turn": 12},
-            {"agent": "agent_a", "event": "hard_violation", "turn": 15},
-            {"agent": "agent_a", "event": "hard_violation", "turn": 18},
+            {"agent": "agent_a", "event": "hard_violation", "turn": 16},
             {"agent": "agent_b", "event": "hard_violation", "turn": 1},
             {"agent": "agent_b", "event": "hard_violation", "turn": 2},
-            {"agent": "agent_b", "event": "hard_violation", "turn": 7},
-            {"agent": "agent_b", "event": "hard_violation", "turn": 8},
-            {"agent": "agent_b", "event": "hard_violation", "turn": 13},
+            {"agent": "agent_b", "event": "hard_violation", "turn": 5},
+            {"agent": "agent_b", "event": "hard_violation", "turn": 10},
+            {"agent": "agent_b", "event": "hard_violation", "turn": 20},
         ]
 
         result = compose_guarantees_with_conditions(

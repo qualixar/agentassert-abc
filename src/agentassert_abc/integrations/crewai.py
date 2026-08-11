@@ -40,10 +40,13 @@ Requires: crewai (pip install crewai)
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
 from agentassert_abc.monitor.session import SessionMonitor
+
+_logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from agentassert_abc.models import ContractSpec
@@ -125,7 +128,15 @@ class CrewAIAdapter:
         """
         state = self.extract_state(task_output)
         with self._lock:
-            self._monitor.step(state)
+            step_result = self._monitor.step(state)
+        # Ledger 5c: log hard violations so they are observable even without raising.
+        if step_result.hard_violations > 0:
+            violated = ", ".join(step_result.violated_names)
+            _logger.error(
+                "CrewAIAdapter.callback: %d hard violation(s) detected [%s]",
+                step_result.hard_violations,
+                violated,
+            )
 
     def check(self, agent_output: Any) -> StepResult:
         """Evaluate a TaskOutput without raising or rejecting.

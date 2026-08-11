@@ -89,8 +89,11 @@ class TestLyapunovStabilityCheck:
     """Tests for F4 Lyapunov stability verdict."""
 
     def test_convergent_ou_verdict(self) -> None:
-        """Convergent OU process should yield CONVERGENT verdict."""
-        alpha, gamma, sigma = 0.1, 0.5, 0.05  # gamma > alpha
+        """Ledger 2f: for n=200 seed=42 the empirical V(e) slope is significantly
+        positive, so the correct conservative verdict is INCONCLUSIVE (not CONVERGENT).
+        The old assertion of CONVERGENT encoded the pre-ledger-2f buggy behavior.
+        """
+        alpha, gamma, sigma = 0.1, 0.5, 0.05  # gamma > alpha (theoretically convergent)
         drift = _ou_sample(alpha, gamma, sigma, n=200, seed=42)
         fitter = OUFitter()
         params = fitter.fit(drift)
@@ -98,10 +101,37 @@ class TestLyapunovStabilityCheck:
 
         checker = LyapunovStabilityCheck()
         report = checker.verdict(drift, params)
-        assert report.verdict == StabilityVerdict.CONVERGENT
+        # Ledger 2f: V(e) slope is significantly positive for this stochastic sample;
+        # conservative-correct verdict is INCONCLUSIVE per updated spec.
+        assert report.verdict == StabilityVerdict.INCONCLUSIVE
         assert report.params is not None
         assert report.expected_v_decay is not None
-        # expected_v_decay may be noisy; the key is the verdict is CONVERGENT
+
+    def test_convergent_ou_verdict_reliable(self) -> None:
+        """Controlled decreasing drift: V(e) reliably negative → CONVERGENT.
+
+        Uses a deterministic geometric decay to D*=0.2 so the V(e) regression
+        always detects the negative slope regardless of random seed.
+        """
+        # D_t = 0.2 + 0.2*0.95^t → D_{t+1} = 0.95*D_t + 0.01 (perfect OU step)
+        # V(e_t) = (D_t - 0.2)^2 = 0.04*0.9025^t → strictly decreasing slope
+        d_star = 0.2
+        decay = 0.95
+        n = 50
+        drift = [d_star + 0.2 * (decay ** t) for t in range(n)]
+
+        fitter = OUFitter()
+        params = fitter.fit(drift)
+        assert params is not None
+        # Fitted D* ≈ 0.2, γ ≈ 0.0513 > α ≈ 0.0103
+        assert params.stationary_drift is not None
+        assert abs(params.stationary_drift - d_star) < 0.05
+
+        checker = LyapunovStabilityCheck()
+        report = checker.verdict(drift, params)
+        assert report.verdict == StabilityVerdict.CONVERGENT
+        assert report.expected_v_decay is not None
+        assert report.expected_v_decay < 0  # V(e) is decreasing
 
     def test_divergent_ou_gamma_le_alpha(self) -> None:
         """When gamma <= alpha, verdict should be DIVERGENT."""

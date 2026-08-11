@@ -322,7 +322,7 @@ print(f"Pipeline bound: {bound:.3f}")  # p_{A+B} >= 0.921
 | Compositional safety proofs | Yes | No | No | No |
 | Hard/Soft constraint separation | Yes | Partial | No | No |
 | Recovery re-prompting | Yes | Yes | Yes | No |
-| Framework integrations | 10 adapters | 3 | 1 (LangChain) | 2 |
+| Framework integrations | 6 adapters | 3 | 1 (LangChain) | 2 |
 | Statistical certification (SPRT) | Yes | No | No | No |
 | Benchmark suite | 293 scenarios | No | No | No |
 | Academic paper | [arXiv:2602.22302](https://arxiv.org/abs/2602.22302) | No | No | No |
@@ -376,9 +376,15 @@ Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instruct
 
 ## License
 
-GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE).
+AgentAssert ships under a **dual license**.
 
-For commercial licensing (closed-source, proprietary, or hosted use), see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) or contact varun.pratap.bhardwaj@gmail.com.
+| Track | License | Who it covers |
+|---|---|---|
+| Open use | [AGPL-3.0-or-later](LICENSE) | Open-source, research, internal, AGPL-compatible products |
+| Commercial use | [Commercial License](COMMERCIAL-LICENSE.md) | Proprietary products, closed-source, hosted SaaS |
+| npm CLI wrapper | [AGPL-3.0-or-later](LICENSE) | `claim/npm/` package |
+
+For full obligation details, dual-license terms, and commercial licensing inquiries: [LICENSING.md](LICENSING.md).
 
 Copyright (c) 2026 Varun Pratap Bhardwaj / Qualixar.
 
