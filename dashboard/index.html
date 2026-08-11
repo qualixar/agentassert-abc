@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentAssert — Experiment Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div>
+        <h1 class="site-title">AgentAssert</h1>
+        <p class="site-subtitle">Experiment Dashboard — <span id="meta-label">loading…</span></p>
+      </div>
+      <div id="header-badge" class="cert-badge"></div>
+    </div>
+  </header>
+
+  <!-- ── No-data guard ─────────────────────────────────────────── -->
+  <div id="no-data-msg" class="no-data hidden">
+    <h2>No data loaded</h2>
+    <p>Run the exporter first, then serve this directory:</p>
+    <pre>.venv/bin/python dashboard/export_dashboard_data.py \
+    --input /path/to/missions.jsonl \
+    --out-dir dashboard/
+
+cd dashboard &amp;&amp; python -m http.server 8080
+# open http://localhost:8080/index.html</pre>
+  </div>
+
+  <!-- ── Main content ──────────────────────────────────────────── -->
+  <main id="main-content" class="hidden">
+
+    <!-- KPI cards -->
+    <section class="kpi-row" id="kpi-row"></section>
+
+    <!-- E-Process certification -->
+    <section class="dash-section" id="cert-section">
+      <h2>E-Process Certification  <span id="cert-badge-inline" class="badge"></span></h2>
+      <p class="section-desc">
+        Log-wealth E(r) of the anytime-valid mixture e-process vs. the threshold
+        log(1/α). Certification occurs at the first mission where E(r) ≥ 1/α.
+      </p>
+      <div class="chart-wrapper">
+        <canvas id="eprocess-canvas"></canvas>
+      </div>
+      <div id="cert-stats" class="stats-row"></div>
+    </section>
+
+    <!-- Composition + Dependence (two columns) -->
+    <div class="two-col">
+      <section class="dash-section" id="comp-section">
+        <h2>Composition</h2>
+        <p class="section-desc">
+          Observed graph reliability Θ vs. the multiplicative independence product.
+          Gap &lt; 0 means positive dependence inflates actual reliability.
+        </p>
+        <div class="chart-wrapper comp-chart-wrap">
+          <svg id="comp-svg" class="comp-svg"></svg>
+        </div>
+        <div id="comp-stats" class="stats-row"></div>
+      </section>
+
+      <section class="dash-section" id="dep-section">
+        <h2>Co-Failure Dependence</h2>
+        <p class="section-desc">
+          Binary Kendall τ<sub>a</sub> and 2×2 contingency for the primary
+          scored agent pair. τ<sub>a</sub> &gt; 0 → correlated failure modes.
+        </p>
+        <div id="cofailure-table-wrap"></div>
+        <div id="tau-ci-wrap" class="tau-ci-section"></div>
+        <div id="dep-stats" class="stats-row"></div>
+      </section>
+    </div>
+
+    <!-- Drift + Breakdown (two columns) -->
+    <div class="two-col">
+      <section class="dash-section" id="drift-section">
+        <h2>Drift  <small class="dim">(Jacobi Gate)</small></h2>
+        <p class="section-desc">
+          Per-agent Jacobi MoM fit and identifiability gate.
+          Gate requires ≥3 non-null drift observations per agent.
+        </p>
+        <div id="drift-summary-row" class="stats-row"></div>
+        <div id="drift-agents-table"></div>
+      </section>
+
+      <section class="dash-section" id="breakdown-section">
+        <h2>Mission Breakdown</h2>
+        <p class="section-desc">Pass rate by topology (motif) and model-sharing condition.</p>
+        <div id="breakdown-content"></div>
+      </section>
+    </div>
+
+  </main><!-- /#main-content -->
+
+  <!-- ── Scripts: data first, then chart helpers, then app ──────── -->
+  <script src="data.js" onerror="window.__dataJsError=true"></script>
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
