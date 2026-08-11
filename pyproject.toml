@@ -1,6 +1,6 @@
 [project]
 name = "agentassert-abc"
-version = "0.4.0"
+version = "0.5.0"
 description = "Formal behavioral specification and runtime enforcement for autonomous AI agents. Agent Behavioral Contracts (ABC)."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -54,9 +54,33 @@ math = [
 ]
 llm = ["litellm>=1.50"]
 otel = ["opentelemetry-api>=1.28"]
-all = [
-    "agentassert-abc[yaml,math,llm,otel]",
+# Type C consolidation (port-delta §F.5 / Phase D): the enforcement plane and
+# its runtime adapters, ported from agentassert-typec.
+gateway = [
+    "agentassert-abc[yaml,math]",
 ]
+proxy = [
+    "agentassert-abc[gateway]",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "httpx>=0.28",
+    "orjson>=3.10",
+    "click>=8.1",
+]
+sdk = [
+    "agentassert-abc[gateway]",
+]
+claude-code = [
+    "agentassert-abc[gateway]",
+    "click>=8.1",
+]
+all = [
+    "agentassert-abc[yaml,math,llm,otel,gateway,proxy,sdk,claude-code]",
+]
+
+[project.scripts]
+agentassert-abc-proxy = "agentassert_abc.proxy.cli:cli"
+agentassert-abc-claude-code = "agentassert_abc.claude_code.cli:cli"
 
 [build-system]
 requires = ["hatchling"]
@@ -95,6 +119,10 @@ dev = [
     "basedpyright>=1.20",
     "openai>=2.30.0",
     "anthropic>=0.89.0",
+    # Type C consolidation — exercise the [proxy]/[sdk]/[claude-code] extras in tests.
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "orjson>=3.10",
 ]
 docs = [
     "mkdocs-material>=9.5",

@@ -1,0 +1,6 @@
+# Invalid: missing name
+dsl_version: "0.4"
+contractspec: "1.0"
+kind: agent
+description: "No name"
+version: "0.1"

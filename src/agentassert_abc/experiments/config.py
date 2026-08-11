@@ -54,7 +54,7 @@ META_REASONING_EFFORT: Final[str] = "minimal"
 # here returns null content under the 160-token cap (rejected loudly).
 OPENROUTER_DEFAULT_MODEL: Final[str] = "mistralai/mistral-small-24b-instruct-2501"
 
-# GrokBridgeClient local hermes proxy base URL.  Override via env var
+# GrokBridgeClient local bridge proxy base URL.  Override via env var
 # GROK_PROXY_BASE_URL before constructing the adapter.
 GROK_PROXY_BASE_URL: Final[str] = "http://localhost:8787/v1"
 
@@ -104,7 +104,7 @@ OPENROUTER_SAME_VENDOR_MODEL: Final[str] = "mistralai/ministral-8b-2512"
 #   Verified correct on capability probes.
 OPENROUTER_DIFF_VENDOR_MODEL: Final[str] = "google/gemma-3-12b-it"
 #
-# Grok model ID for the GrokBridgeClient breadth arm (local hermes proxy,
+# Grok model ID for the GrokBridgeClient breadth arm (local bridge proxy,
 #   subscription-backed, $0 per-call).
 GROK_MODEL: Final[str] = "grok-4.5"
 

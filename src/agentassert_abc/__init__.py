@@ -31,6 +31,7 @@ from agentassert_abc._version import __version__
 from agentassert_abc.exceptions import (
     AgentAssertError,
     ContractBreachError,
+    ContractLoadError,
     ContractParseError,
     ContractValidationError,
     DriftThresholdError,
@@ -75,6 +76,9 @@ def __getattr__(name: str):  # type: ignore[no-untyped-def]  # noqa: N807
         "loads": ("agentassert_abc.dsl.parser", "loads_contract"),
         "parse": ("agentassert_abc.dsl.parser", "parse_contract"),
         "parses": ("agentassert_abc.dsl.parser", "parses_contract"),
+        # DSL parsing — extended (enforcement plane: invariants.process)
+        "load_contract_extended": ("agentassert_abc.dsl.parser", "load_contract_extended"),
+        "loads_contract_extended": ("agentassert_abc.dsl.parser", "loads_contract_extended"),
         "validate": ("agentassert_abc.dsl.validator", "validate_contract"),
         # Evaluation
         "evaluate": ("agentassert_abc.evaluator.engine", "evaluate"),
@@ -82,6 +86,7 @@ def __getattr__(name: str):  # type: ignore[no-untyped-def]  # noqa: N807
         # Monitor
         "SessionMonitor": ("agentassert_abc.monitor.session", "SessionMonitor"),
         "compute_theta": ("agentassert_abc.metrics.theta", "compute_theta"),
+        "ThetaScorer": ("agentassert_abc.metrics.theta", "ThetaScorer"),
         # Result types (F-06: export all result types)
         "StepResult": ("agentassert_abc.monitor.models", "StepResult"),
         "SessionSummary": ("agentassert_abc.monitor.models", "SessionSummary"),
@@ -165,11 +170,14 @@ __all__ = [
     "loads",
     "parse",
     "parses",
+    "load_contract_extended",
+    "loads_contract_extended",
     "validate",
     "evaluate",
     "evaluate_preconditions",
     "SessionMonitor",
     "compute_theta",
+    "ThetaScorer",
     # Result types (F-06)
     "StepResult",
     "SessionSummary",
@@ -244,6 +252,7 @@ __all__ = [
     # Exceptions
     "AgentAssertError",
     "ContractBreachError",
+    "ContractLoadError",
     "ContractParseError",
     "ContractValidationError",
     "DriftThresholdError",
