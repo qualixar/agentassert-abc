@@ -23,7 +23,7 @@ Adapters
     API key: env var ``MODEL_API_KEY``.
 
 :class:`GrokBridgeClient`
-    Local hermes proxy (no API key — subscription-backed).
+    Local bridge proxy (no API key — subscription-backed).
     Endpoint: ``{GROK_PROXY_BASE_URL}/chat/completions``.
     Base URL: env var ``GROK_PROXY_BASE_URL`` (default
     :data:`~agentassert_abc.experiments.config.GROK_PROXY_BASE_URL`).
@@ -639,7 +639,7 @@ class MetaSparkClient(_OpenAICompatBase):
 
 
 class GrokBridgeClient(_OpenAICompatBase):
-    """Local hermes proxy adapter for Grok — no API key required.
+    """Local bridge proxy adapter for Grok — no API key required.
 
     Routes requests through a locally running proxy (default
     ``http://localhost:8787/v1/chat/completions``).  The proxy is
@@ -687,7 +687,7 @@ class RoutingClient:
 
     Routing by model-id prefix:
       * ``muse*`` → :class:`MetaSparkClient`   (Meta ``/v1/responses``)
-      * ``grok*`` → :class:`GrokBridgeClient`  (local hermes proxy)
+      * ``grok*`` → :class:`GrokBridgeClient`  (local bridge proxy)
       * otherwise → :class:`OpenRouterClient`
 
     Sub-clients are built lazily (only the backends actually used are

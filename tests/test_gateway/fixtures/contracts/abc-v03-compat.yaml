@@ -1,0 +1,21 @@
+dsl_version: "0.3"
+contractspec: "1.0"
+kind: agent
+name: abc-style
+description: "ABC v0.3 compat test"
+version: "0.1"
+
+invariants:
+  hard:
+    - name: no-pii
+      description: "No PII in output"
+      check:
+        field: output.pii_detected
+        equals: false
+  soft:
+    - name: fast-response
+      description: "Response under 5 seconds"
+      check:
+        field: latency_ms
+        lte: 5000
+      recovery_window: 3

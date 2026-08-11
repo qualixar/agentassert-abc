@@ -1,0 +1,52 @@
+dsl_version: "0.4"
+contractspec: "1.0"
+kind: agent
+name: partner-mode
+description: "Challenge-first, cost-before-paid-API, no destructive tools."
+version: "0.1"
+
+invariants:
+  process:
+    - must_precede:
+        before: "challenge"
+        after: "recommendation"
+        scope: turn
+
+    - must_state:
+        field: "cost"
+        before_tool_pattern: "paid_api_*|mcp__paid_tool*"
+        rationale: "Declare cost before calling any metered/paid tool."
+
+    - tool_blocklist:
+        tools:
+          - "rm -rf /*"
+          - "rm --no-preserve-root"
+          - "curl|bash"
+          - "wget|bash"
+          - "*--no-verify"
+        scope: session
+
+    - context_budget:
+        max_tokens_per_turn: 60000
+        action_on_breach: warn
+
+    - process_drift:
+        window_size: 10
+        jsd_threshold: 0.30
+        action: log
+
+    - judge_predicate:
+        rubric: "Response shows conviction (no 'depends', no 'either works')"
+        sample_rate: 0.20
+        model: free-tier-model
+        action_on_fail: theta_penalty
+        cost_ceiling_usd_per_session: 0.0
+
+recovery:
+  on_hard_violation: raise
+  on_soft_violation: log_and_continue
+
+satisfaction:
+  p: 0.95
+  delta: 0.10
+  k: 3

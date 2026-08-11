@@ -1,0 +1,18 @@
+dsl_version: "0.4"
+contractspec: "1.0"
+kind: agent
+name: safety-minimal
+description: "Block destructive tool calls only."
+version: "0.1"
+
+invariants:
+  process:
+    - tool_blocklist:
+        tools:
+          - "rm -rf /*"
+          - "curl|bash"
+        scope: session
+
+recovery:
+  on_hard_violation: raise
+  on_soft_violation: log_and_continue

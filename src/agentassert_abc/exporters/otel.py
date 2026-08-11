@@ -15,6 +15,11 @@ Designed as a subscriber to the EventBus for zero-overhead integration.
 Gracefully degrades if opentelemetry-api is not installed (no-op mode).
 
 Phase 6 — Layer 6: Dashboard & Export → OTEL.
+
+Type C consolidation (port-delta §F, Phase F): `enforcement_request_span()`
+and `enforcement_session_span()` were merged in from agentassert-typec's
+`exporters/otel.py::TypeCOTelExporter` — additive span types on this same
+exporter, not a second exporter class.
 """
 
 from __future__ import annotations
@@ -120,6 +125,102 @@ class OTelExporter:
                 "agentassert.total_events": total_events,
                 "agentassert.recovery_rate": recovery_rate,
                 "agentassert.turn_count": turn_count,
+            },
+            start_time_ns=self._start_ns,
+            end_time_ns=time.monotonic_ns(),
+            status="OK" if theta >= 0.9 else "WARN",
+        )
+        self._spans.append(span)
+        self._send(span)
+        return span
+
+    def enforcement_request_span(
+        self,
+        *,
+        session_id: str,
+        request_id: str,
+        contract_name: str,
+        contract_version: str,
+        decision: str,
+        violation_name: str = "",
+        violation_reason: str = "",
+        tool: str = "",
+        provider: str = "",
+        overhead_ms: float = 0.0,
+        stream: bool = False,
+        adapter: str = "",
+    ) -> OTelSpan:
+        """Span for one enforcement-plane request (gateway/proxy/sdk/claude_code).
+
+        Merged from agentassert-typec's `exporters/otel.py::TypeCOTelExporter`
+        (port-delta §F — additive span types on abc v2's existing exporter,
+        not a second exporter). Unlike typec's original, this method does not
+        require the real `opentelemetry-sdk` — it follows the same lightweight
+        `OTelSpan` dataclass + `_send()` override point as `step_span`/
+        `session_span`, so it degrades gracefully (no-op) with no extra deps.
+        """
+        span = OTelSpan(
+            name="agentassert.enforcement.request",
+            attributes={
+                "service.name": self._service,
+                "agentassert.request.id": request_id,
+                "agentassert.session.id": session_id,
+                "agentassert.contract.name": contract_name,
+                "agentassert.contract.version": contract_version,
+                "agentassert.decision": decision,
+                "agentassert.violation.name": violation_name,
+                "agentassert.violation.reason": violation_reason,
+                "agentassert.tool": tool,
+                "agentassert.provider": provider,
+                "agentassert.overhead_ms": overhead_ms,
+                "agentassert.stream": stream,
+                "agentassert.adapter": adapter,
+            },
+            start_time_ns=self._start_ns,
+            end_time_ns=time.monotonic_ns(),
+            status="OK" if decision != "deny" else "ERROR",
+        )
+        self._spans.append(span)
+        self._send(span)
+        return span
+
+    def enforcement_session_span(
+        self,
+        *,
+        session_id: str,
+        contract_name: str,
+        theta: float,
+        turn_count: int,
+        violation_count: int,
+        deny_count: int,
+        duration_s: float,
+        jsd: float,
+        judge_cost_usd: float = 0.0,
+        judge_samples: int = 0,
+        judge_failures: int = 0,
+    ) -> OTelSpan:
+        """Session-level summary span for the enforcement plane.
+
+        Merged from typec's `emit_session` (port-delta §F). Distinct from
+        `session_span` (the measurement plane's summary) — both may be
+        emitted for the same session if a caller uses gateway enforcement
+        alongside abc's measurement `SessionMonitor`.
+        """
+        span = OTelSpan(
+            name="agentassert.enforcement.session",
+            attributes={
+                "service.name": self._service,
+                "agentassert.session.id": session_id,
+                "agentassert.contract.name": contract_name,
+                "agentassert.theta": theta,
+                "agentassert.turn_count": turn_count,
+                "agentassert.violation_count": violation_count,
+                "agentassert.deny_count": deny_count,
+                "agentassert.duration_s": duration_s,
+                "agentassert.drift.jsd": jsd,
+                "agentassert.judge.cost_usd": judge_cost_usd,
+                "agentassert.judge.samples": judge_samples,
+                "agentassert.judge.failures": judge_failures,
             },
             start_time_ns=self._start_ns,
             end_time_ns=time.monotonic_ns(),

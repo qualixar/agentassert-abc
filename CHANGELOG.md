@@ -4,6 +4,38 @@ All notable changes to `agentassert-abc` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — unreleased
+
+### Added
+
+- **Runtime enforcement plane** — real-time behavioral-contract enforcement that returns
+  ALLOW / DENY / REDACT / MODIFY decisions on tool calls and model responses, complementing
+  the existing measurement and certification planes. New `agentassert_abc.gateway`
+  (`SessionEnforcer`, event dispatch, compiled process invariants, SQLite session persistence).
+- **Process invariants** — authored under `invariants.process` in a contract:
+  `must_precede`, `must_state`, tool allow/block lists, per-turn context-token budget,
+  process-drift guard, sampled LLM-as-judge predicate, PII filter, cost ceiling, and
+  repetition guard.
+- **Zero-code-change adoption surfaces** (optional install extras):
+  - `agentassert-abc[sdk]` — `wrap(client, contract)` one-liner for Anthropic and OpenAI clients.
+  - `agentassert-abc[proxy]` — HTTP proxy that enforces contracts across Anthropic / OpenAI /
+    Gemini / OpenRouter traffic.
+  - `agentassert-abc[claude-code]` — Claude Code hook that enforces a contract on tool use.
+- `ContractSpecExtended` and `load_contract_extended` / `loads_contract_extended` — contract
+  loading with the process plane and full semantic validation.
+- OpenTelemetry spans for enforcement events.
+
+### Changed
+
+- `ContractBreachError` now carries optional structured fields (violation, tool, session,
+  decision) while remaining backward-compatible with a plain-message raise.
+
+### Notes
+
+- Consolidates the former `agentassert-typec` packages into `agentassert-abc`. The
+  `agentassert-typec-*` distributions continue to work as thin deprecation shims that forward
+  here; install the matching extra (`agentassert-abc[gateway]`) going forward.
+
 ## [0.4.0] — 2026-08-11
 
 ### Added

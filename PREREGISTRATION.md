@@ -45,7 +45,7 @@ crossing vs p0=0.90) and Jacobi drift per condition. Not used to accept H1–H3.
   | same_vendor | mistral-small-24b × ministral-8b | OpenRouter | 6000 | 16 |
   | different_vendor | mistral-small-24b × gemma-3-12b-it | OpenRouter | 6000 | 16 |
   | different_vendor_meta | muse-spark-1.2-contributor × mistral-small-24b | Meta | 2000 | 2 |
-  | different_vendor_grok | grok-4.5 × mistral-small-24b | Grok (hermes) | 2000 | 4 |
+  | different_vendor_grok | grok-4.5 × mistral-small-24b | Grok (bridge) | 2000 | 4 |
 
   Primary confirmatory arms (H1–H3) are the three OpenRouter arms at n=6000
   (full power for a tight τ CI / identifiability diameter). The two breadth

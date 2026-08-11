@@ -18,10 +18,12 @@ from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 
+from agentassert_abc.dsl.extended_validator import validate_extended
 from agentassert_abc.dsl.models import ParseResult, ValidationError
 from agentassert_abc.dsl.validator import validate_contract
 from agentassert_abc.exceptions import ContractParseError, ContractValidationError
 from agentassert_abc.models import ContractSpec
+from agentassert_abc.process.models import ContractSpecExtended
 
 try:
     from ruamel.yaml import YAML, YAMLError
@@ -124,3 +126,53 @@ def parse_contract(path: str | Path) -> ParseResult:
             ]
         )
     return parses_contract(p.read_text(encoding="utf-8"))
+
+
+# --- Extended contracts (enforcement plane: invariants.process) ---
+
+
+def _validate_struct_extended(data: dict[str, Any]) -> ContractSpecExtended:
+    """Structural validation of an extended contract via Pydantic."""
+    try:
+        return ContractSpecExtended.model_validate(data)
+    except PydanticValidationError as e:
+        raise ContractParseError(f"Contract validation error: {e}") from e
+
+
+def loads_contract_extended(yaml_string: str) -> ContractSpecExtended:
+    """Load + validate an extended (process-plane) contract from a YAML string.
+
+    Superset of :func:`loads_contract`: parses into :class:`ContractSpecExtended`,
+    runs the base semantic validator (shared with the measurement plane) plus the
+    process-operator semantic validator. Base contracts (no ``invariants.process``)
+    parse identically — every extension field is optional.
+
+    Raises:
+        ContractParseError: YAML syntax or structural validation failure.
+        ContractValidationError: Semantic validation failure (errors only).
+    """
+    data = _parse_yaml(yaml_string)
+    contract = _validate_struct_extended(data)
+
+    errors = validate_contract(contract)
+    errors += validate_extended(data)
+    error_level = [e for e in errors if e.level == "error"]
+    if error_level:
+        msg = "; ".join(f"[{e.code}] {e.path}: {e.message}" for e in error_level)
+        raise ContractValidationError(f"Semantic validation failed: {msg}")
+
+    return contract
+
+
+def load_contract_extended(path: str | Path) -> ContractSpecExtended:
+    """Load + validate an extended contract from a YAML file.
+
+    Raises:
+        FileNotFoundError: Path does not exist.
+        ContractParseError / ContractValidationError: as in
+            :func:`loads_contract_extended`.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Contract file not found: {p}")
+    return loads_contract_extended(p.read_text(encoding="utf-8"))

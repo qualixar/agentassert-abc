@@ -1,0 +1,67 @@
+dsl_version: "0.4"
+contractspec: "1.0"
+kind: agent
+name: full-governance
+description: "All 7 operators enabled. For high-trust agent deployments."
+version: "0.1"
+
+invariants:
+  hard:
+    - name: no-pii
+      description: "No PII"
+      check:
+        field: output.pii_detected
+        equals: false
+  process:
+    - tool_blocklist:
+        tools: ["rm -rf /*", "curl|bash", "mkfs.*"]
+        scope: session
+
+    - tool_allowlist:
+        tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
+        scope: session
+
+    - must_state:
+        field: "cost"
+        before_tool_pattern: "paid_api_*"
+        rationale: "Paid API requires cost declaration"
+
+    - must_precede:
+        before: "challenge"
+        after: "recommendation"
+        scope: turn
+
+    - context_budget:
+        max_tokens_per_turn: 60000
+        action_on_breach: warn
+
+    - process_drift:
+        window_size: 15
+        jsd_threshold: 0.30
+        action: theta_penalty
+
+    - judge_predicate:
+        rubric: "Response shows concrete recommendation with supporting rationale"
+        sample_rate: 0.15
+        model: free-tier-model
+        action_on_fail: theta_penalty
+        cost_ceiling_usd_per_session: 0.0
+
+satisfaction:
+  p: 0.95
+  delta: 0.10
+  k: 3
+
+drift:
+  window: 30
+  thresholds:
+    warning: 0.25
+    critical: 0.50
+
+reliability:
+  weights:
+    compliance: 0.35
+    drift: 0.25
+    event_freq: 0.20
+    recovery_success: 0.20
+  deployment_threshold: 0.90
