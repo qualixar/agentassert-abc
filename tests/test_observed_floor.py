@@ -18,6 +18,7 @@ from scipy.stats import beta
 from agentassert_abc.certification.observed_floor import (
     clopper_pearson_lower,
     clopper_pearson_upper,
+    design_effect_adjusted_floor,
     observed_all_success_floor,
     observed_atleast_k_floor,
 )
@@ -154,3 +155,38 @@ def test_atleast_k_validation():
         observed_atleast_k_floor(passes, k=0)            # k < 1
     with pytest.raises(DependenceError):
         observed_atleast_k_floor(passes, k=3)            # k > m
+
+
+# --------------------------------------------------------------------------
+# Design-effect-adjusted floor (i.i.d.-missions due diligence)
+# --------------------------------------------------------------------------
+
+
+def test_design_effect_is_neutral_on_iid_series():
+    # i.i.d. Bernoulli series => DEFF ≈ 1 => adjusted floor ≈ plain CP floor.
+    rng = np.random.default_rng(0)
+    y = (rng.random(2000) < 0.55).astype(int)
+    r = design_effect_adjusted_floor(y, eta_conf=0.05, n_boot=400)
+    plain = clopper_pearson_lower(int(y.sum()), y.size)
+    assert r.n >= 0.9 * y.size                            # n_eff ≈ n
+    assert r.floor == pytest.approx(plain, abs=0.01)
+
+
+def test_design_effect_lowers_floor_on_autocorrelated_series():
+    # a strongly serially-correlated series (long runs) => DEFF > 1 => n_eff < n
+    # => strictly more conservative floor than the naive CP.
+    rng = np.random.default_rng(1)
+    blocks = (rng.random(200) < 0.55).astype(int)
+    y = np.repeat(blocks, 10)                             # runs of length 10
+    r = design_effect_adjusted_floor(y, eta_conf=0.05, n_boot=400)
+    plain = clopper_pearson_lower(int(y.sum()), y.size)
+    assert r.n < y.size                                  # effective n shrank
+    assert r.floor < plain                               # more conservative
+    assert "DEFF" in r.basis
+
+
+def test_design_effect_validation():
+    with pytest.raises(DependenceError):
+        design_effect_adjusted_floor(np.array([[0, 1], [1, 0]]))   # 2-D
+    with pytest.raises(DependenceError):
+        design_effect_adjusted_floor(np.array([0, 2, 1]))          # non-binary
