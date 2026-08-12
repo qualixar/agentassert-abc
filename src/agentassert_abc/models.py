@@ -231,6 +231,11 @@ class DriftConfig(_FrozenModel):
     weights: DriftWeights = DriftWeights()
     window: int = Field(50, ge=1, le=10000)
     thresholds: DriftThresholds = DriftThresholds()
+    # Turns of observed behaviour after which the windowed action distribution
+    # is adopted as the drift baseline. Nothing in the package ever called
+    # set_reference(), so before this the distributional (JSD) half of D(t) was
+    # inert by default. 0 disables auto-calibration (explicit reference only).
+    auto_calibrate_after: int = Field(10, ge=0, le=10000)
 
 
 # --- Reliability Configuration (§5.7) ---

@@ -293,13 +293,30 @@ class CpCellBox:
 def bonferroni_cp_cells(passes: object, eta: float = 0.05) -> CpCellBox:
     """Simultaneous CP box on marginals + pairwise co-success/co-failure cells.
 
+    .. warning::
+        **Callers must halve their own η.** The Bonferroni budget is split
+        ``K = m + C(m, 2)`` ways, but this returns *two-sided* intervals for the
+        marginals, the co-success cells **and** the co-failure cells — up to
+        ``2m + 4·C(m, 2)`` one-sided tails, not ``K``. A caller that consumes the
+        two-sided box and passes its target ``η`` straight through therefore gets
+        family-wise miscoverage ``2η``, i.e. a ``(1 − 2η)`` region, not
+        ``(1 − η)``.
+
+        :func:`~agentassert_abc.certification.lp_bound.pairwise_cp_box_floor`
+        compensates correctly by passing ``eta_conf / 2``.
+        :func:`~agentassert_abc.certification.slepian_floor.slepian_model_floor`
+        deliberately does not, and is documented as a ``(1 − 2η)`` **diagnostic**
+        that is never selected as the certificate. Any new caller wanting a true
+        ``(1 − η)`` guarantee must pass ``eta / 2``.
+
     Args:
         passes: ``m × n`` binary pass matrix.
-        eta: family-wise one-sided miscoverage (split Bonferroni across the
-            ``K = m + C(m, 2)`` functionals).
+        eta: Bonferroni budget to split across the ``K = m + C(m, 2)``
+            functionals — **not** the caller's target confidence level. See the
+            warning above.
 
     Returns:
-        A :class:`CpCellBox` valid simultaneously with probability ``≥ 1 − η``.
+        A :class:`CpCellBox` whose ``K`` functionals each hold at ``η / K``.
     """
     if not 0.0 < eta < 1.0:
         raise DependenceError("eta must be in (0, 1)")

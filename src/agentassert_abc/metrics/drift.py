@@ -81,8 +81,21 @@ class DriftTracker:
         self._action_window: deque[str] = deque(maxlen=window)
 
     def set_reference(self, distribution: dict[str, float]) -> None:
-        """Set the reference action distribution (established during calibration)."""
+        """Pin the reference action distribution explicitly.
+
+        Overrides auto-calibration: once set, the reference never moves.
+        """
         self._reference = dict(distribution)
+
+    @property
+    def is_calibrated(self) -> bool:
+        """Whether a reference distribution exists, so JSD can be measured."""
+        return self._reference is not None
+
+    @property
+    def reference(self) -> dict[str, float] | None:
+        """The reference distribution in force, or ``None`` before calibration."""
+        return dict(self._reference) if self._reference is not None else None
 
     def compute_drift(
         self,
@@ -108,14 +121,30 @@ class DriftTracker:
 
         # D_distributional = JSD(P_window || P_ref)
         d_distributional = 0.0
-        if action_dist is not None and self._reference is not None:
-            # C-10: Accumulate into windowed empirical distribution
+        if action_dist is not None:
+            # C-10: Accumulate into windowed empirical distribution.
+            # This runs unconditionally: it previously sat behind the reference
+            # check, so with no reference the window stayed empty and the whole
+            # distributional term — 40% of D(t) by default — was permanently 0.
             for label, freq in action_dist.items():
                 for _ in range(max(1, int(freq))):
                     self._action_window.append(label)
 
+            # Auto-calibrate: adopt the early behaviour as the baseline once
+            # enough turns have been seen. Without this, nothing in the package
+            # ever called set_reference(), so JSD never contributed for either
+            # SessionMonitor or SessionEnforcer. Explicitly setting a reference
+            # still wins; auto-calibration only fills the gap.
+            calibrate_after = self._config.auto_calibrate_after
+            if (
+                self._reference is None
+                and calibrate_after > 0
+                and len(self._action_window) >= calibrate_after
+            ):
+                self._reference = self._build_empirical_distribution()
+
             # Build empirical distribution from window
-            if self._action_window:
+            if self._action_window and self._reference is not None:
                 empirical = self._build_empirical_distribution()
                 d_distributional = self._compute_jsd_from_dicts(
                     empirical, self._reference

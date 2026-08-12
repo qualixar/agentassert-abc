@@ -12,6 +12,10 @@ D_distributional(t) = JSD(P_t || P_ref)
 
 import math
 
+import pytest
+
+from agentassert_abc.metrics.drift import DriftTracker
+
 
 class TestDriftComputation:
     """D(t) = w_c × (1-C(t)) + w_d × JSD(P_t || P_ref)."""
@@ -103,3 +107,54 @@ class TestJSDComputation:
         q = [0.0, 1.0]
         jsd = compute_jsd(p, q)
         assert 0 <= jsd <= math.log(2) + 1e-10
+
+
+class TestDriftAutoCalibration:
+    """The distributional (JSD) half of D(t) must be live by default.
+
+    Regression: `set_reference()` was never called anywhere in the package, and
+    the action window was only accumulated *after* a reference existed. So the
+    window stayed empty, JSD stayed 0, and 40% of the drift weight was inert for
+    every SessionMonitor and SessionEnforcer user.
+    """
+
+    def test_uncalibrated_at_first_and_calibrates_after_enough_turns(self) -> None:
+        tracker = DriftTracker()
+        assert tracker.is_calibrated is False
+        after = tracker._config.auto_calibrate_after
+        for _ in range(after + 2):
+            tracker.compute_drift(1.0, {"search": 1.0})
+        assert tracker.is_calibrated is True
+        assert tracker.reference is not None
+
+    def test_stable_behaviour_keeps_distributional_drift_at_zero(self) -> None:
+        tracker = DriftTracker()
+        for _ in range(30):
+            drift = tracker.compute_drift(1.0, {"search": 1.0})
+        assert drift == pytest.approx(0.0, abs=1e-9)
+
+    def test_behaviour_shift_now_registers_as_drift(self) -> None:
+        """The actual regression: this used to stay 0.0 forever."""
+        tracker = DriftTracker()
+        for _ in range(12):
+            tracker.compute_drift(1.0, {"search": 1.0})
+        for _ in range(20):
+            drift = tracker.compute_drift(1.0, {"delete_file": 1.0})
+        assert drift > 0.05, "distributional drift is inert again"
+
+    def test_explicit_reference_overrides_auto_calibration(self) -> None:
+        tracker = DriftTracker()
+        tracker.set_reference({"search": 1.0})
+        pinned = tracker.reference
+        for _ in range(30):
+            tracker.compute_drift(1.0, {"delete_file": 1.0})
+        assert tracker.reference == pinned  # never re-calibrated
+
+    def test_auto_calibration_can_be_disabled(self) -> None:
+        from agentassert_abc.models import DriftConfig
+
+        tracker = DriftTracker(DriftConfig(auto_calibrate_after=0))
+        for _ in range(50):
+            drift = tracker.compute_drift(1.0, {"search": 1.0})
+        assert tracker.is_calibrated is False
+        assert drift == pytest.approx(0.0, abs=1e-9)

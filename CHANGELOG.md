@@ -25,6 +25,27 @@ Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html
   `pairwise_lp_all_success_bounds` and `pairwise_cp_box_floor` are unchanged and
   reproduce bit-for-bit as the order-≤2 case.
 
+- **Coverage-collapse simulation** (`benchmarks/coverage_collapse_sim.py`) — the
+  experiment behind the paper's identification result, which the text described
+  as reproducible but which never shipped. Defaults reproduce the published
+  settings; flags trade fidelity for runtime and every run prints its parameters.
+
+### Fixed
+
+- **The proxy and Claude Code hook now populate constraint state.** Both left
+  invariant fields unset — the proxy sent only a response byte count, the hook
+  sent nothing — so every semantic invariant evaluated false and a fully
+  compliant agent was scored at zero compliance with a violation recorded each
+  turn. Both now flatten the response into the documented field convention, and
+  refuse at load time any contract whose fields that surface can never supply,
+  rather than silently reporting the agent as failing.
+- **Distributional drift is measured by default.** The reference distribution
+  was never established anywhere in the package, so the divergence half of the
+  drift score — 40% of its weight — was permanently zero for every user. The
+  baseline is now adopted automatically after a configurable number of turns
+  (`auto_calibrate_after`, default 10; 0 restores the previous opt-in
+  behaviour). Setting a reference explicitly still takes precedence.
+
 ### Changed
 
 - **Drift stability and admissibility are now separate verdicts.** Mean
