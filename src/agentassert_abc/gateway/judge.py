@@ -18,9 +18,9 @@ import random
 import threading
 from typing import Any
 
-#: Public, generic alias for "whatever free-tier model is configured".
-#: Historically an internal DeepSeek Flash alias — genericized before any
-#: public release (no internal infra naming in shipped code).
+#: Generic alias for "whatever free-tier model is configured". Deliberately
+#: names no specific provider or deployment, so a contract written against it
+#: stays portable across judge backends.
 FREE_TIER_MODEL_ALIAS = "free-tier-model"
 
 

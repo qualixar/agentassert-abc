@@ -179,9 +179,9 @@ def evaluate_turn_end_soft(
 ) -> DecisionResult:
     """process_drift check at turn end.
 
-    Port-delta §C7: uses `drift.history[-1]` (the most recently recorded
-    composite D(t)) as the "current" drift signal — abc v2's DriftTracker
-    has no isolated, side-effect-free "peek at current JSD" call.
+    Uses `drift.history[-1]` (the most recently recorded composite D(t)) as
+    the "current" drift signal, because `DriftTracker` exposes no isolated,
+    side-effect-free "peek at current JSD" call.
     """
     if compiled.process_drift_config:
         current_drift = drift.history[-1] if drift.history else 0.0

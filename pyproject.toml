@@ -54,8 +54,7 @@ math = [
 ]
 llm = ["litellm>=1.50"]
 otel = ["opentelemetry-api>=1.28"]
-# Type C consolidation (port-delta §F.5 / Phase D): the enforcement plane and
-# its runtime adapters, ported from agentassert-typec.
+# The runtime enforcement plane and its adoption surfaces.
 gateway = [
     "agentassert-abc[yaml,math]",
 ]

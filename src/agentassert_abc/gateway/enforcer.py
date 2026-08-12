@@ -270,8 +270,8 @@ class SessionEnforcer:
     def from_yaml(cls, path: str) -> SessionEnforcer:
         """Load a ContractSpecExtended from YAML and build a SessionEnforcer.
 
-        Delegates to the shared DSL parser (Phase D:
-        `agentassert_abc.dsl.parser.load_contract_extended`), which applies
+        Delegates to the shared DSL parser
+        (`agentassert_abc.dsl.parser.load_contract_extended`), which applies
         both the base semantic validator and the process-operator semantic
         validator. Any load / parse / validation failure surfaces uniformly
         as `ContractLoadError`.

@@ -5,11 +5,9 @@
 
 """Gemini-compatible proxy route.
 
-Port-delta bug fix: typec's `gemini.py` called
-`enforce_and_forward(canonical, monitor, request, upstream_overrides)` —
-`upstream_overrides` bound positionally to the `provider_path` parameter, so
-the contract's `upstream.gemini` override was silently never applied. Fixed
-here by passing `upstream_overrides` as the keyword it is.
+`upstream_overrides` is passed by keyword deliberately. An earlier version
+passed it positionally, where it bound to `provider_path` instead and the
+contract's `upstream.gemini` override was silently never applied.
 """
 
 from __future__ import annotations
