@@ -21,13 +21,36 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import linregress
 
+DEFAULT_D_CRIT = 0.6
+"""Critical stationary-drift threshold for the admissibility gate (paper A.4).
+
+The paper sources this as "D_crit = 0.6 per A.3", but A.3 defines the drift
+*weight* ν_c = 0.6 — a weight, not a threshold. The shared 0.6 is a coincidence
+of value, not a derivation, so this is treated here as a documented,
+configurable policy default rather than a derived constant.
+"""
+
 
 class StabilityVerdict(StrEnum):
-    """Lyapunov stability verdict on an observed drift sequence."""
+    """Verdict on an observed drift sequence (paper A.4: two separate gates).
 
-    CONVERGENT = "convergent"    # Matches OU process with γ > α
-    DIVERGENT = "divergent"      # γ ≤ α or empirical divergence
-    INCONCLUSIVE = "inconclusive" # Too short, noisy, or fit failed
+    A.4 separates two properties that the v1 verdict conflated:
+
+    * **Stability** — the OU process is mean-reverting for *every* ``γ > 0``;
+      ``α`` does not enter. The v1 test ``γ > α`` is not scale-invariant (under
+      ``D ↦ cD`` we get ``α ↦ cα`` while ``γ`` is unchanged, so the comparison
+      flips on an unchanged process) and is therefore not used.
+    * **Admissibility** — the attractor ``D* = α/γ`` must lie below
+      ``D_crit``. Both sides are in drift units.
+
+    A process can be perfectly stable yet settle on an unacceptably high drift
+    level; that is ``INADMISSIBLE``, not ``DIVERGENT``.
+    """
+
+    CONVERGENT = "convergent"      # γ > 0 and D* < D_crit: stable, admissible
+    INADMISSIBLE = "inadmissible"  # γ > 0 (stable) but D* = α/γ ≥ D_crit
+    DIVERGENT = "divergent"        # γ ≤ 0: no restoring force at all
+    INCONCLUSIVE = "inconclusive"  # too short, fit failed, or data contradicts fit
 
 
 @dataclass(frozen=True)
@@ -57,16 +80,24 @@ class StabilityReport:
     """Result of Lyapunov stability check on drift sequence.
 
     Attributes:
-        verdict: CONVERGENT, DIVERGENT, or INCONCLUSIVE.
+        verdict: CONVERGENT, INADMISSIBLE, DIVERGENT, or INCONCLUSIVE.
         params: OUParameters if verdict != INCONCLUSIVE else None.
         expected_v_decay: Slope of V(e_t) = (D_t - D*)² over t (negative = converging).
         reason: Human-readable explanation.
+        stable: A.4 gate (i) — mean-reverting (γ > 0). None if not assessable.
+        admissible: A.4 gate (ii) — D* < D_crit. None if not assessable.
+        d_star: Stationary drift D* = α/γ, the attractor the process settles on.
+        d_crit: The admissibility threshold applied.
     """
 
     verdict: StabilityVerdict
     params: OUParameters | None
     expected_v_decay: float | None
     reason: str
+    stable: bool | None = None
+    admissible: bool | None = None
+    d_star: float | None = None
+    d_crit: float = DEFAULT_D_CRIT
 
 
 class OUFitter:
@@ -178,15 +209,26 @@ class LyapunovStabilityCheck:
         self,
         drift_sequence: list[float],
         fitted: OUParameters | None,
+        d_crit: float = DEFAULT_D_CRIT,
     ) -> StabilityReport:
-        """Return stability verdict combining F3 fit quality and F4 V(e) decay.
+        """Return the A.4 two-gate verdict on an observed drift sequence.
+
+        Gate (i) stability: mean-reverting for every ``γ > 0`` (``α`` does not
+        enter). Gate (ii) admissibility: ``D* = α/γ < d_crit``.
+
+        Empirical override: if the observed Lyapunov trajectory ``V(e_t)`` has a
+        significantly *positive* slope, the fit is contradicted by the data and
+        the verdict is ``INCONCLUSIVE`` — an honest refusal (A.4). That check
+        runs before the admissibility gate, because a ``D*`` drawn from a
+        contradicted fit is not a quantity worth ruling on.
 
         Args:
             drift_sequence: Observed drift scores D(t).
             fitted: OUParameters from OUFitter.fit() (may be None).
+            d_crit: Admissibility threshold on the attractor. Default 0.6.
 
         Returns:
-            StabilityReport with verdict, parameters, and explanation.
+            StabilityReport with the verdict, both gate outcomes, and D*.
         """
         # Guard: insufficient data or failed fit
         if fitted is None or len(drift_sequence) < OUFitter.MIN_SEQUENCE_LENGTH:
@@ -195,15 +237,24 @@ class LyapunovStabilityCheck:
                 params=None,
                 expected_v_decay=None,
                 reason="Insufficient data for OU fit (need ≥20 turns) or fit failed to converge",
+                stable=None,
+                admissible=None,
+                d_star=None,
+                d_crit=d_crit,
             )
 
-        # Guard: no mean reversion (γ ≤ 0) -> divergent
+        # Gate (i) — stability. No restoring force at all: genuinely divergent.
+        # NOTE: this is γ ≤ 0, NOT the v1 γ ≤ α test, which A.4 disavows.
         if fitted.gamma <= 0:
             return StabilityReport(
                 verdict=StabilityVerdict.DIVERGENT,
                 params=fitted,
                 expected_v_decay=None,
                 reason=f"Mean-reversion rate gamma={fitted.gamma:.4f} ≤ 0 (no restoring force)",
+                stable=False,
+                admissible=None,
+                d_star=None,
+                d_crit=d_crit,
             )
 
         # Compute stationary mean and Lyapunov variable
@@ -214,6 +265,10 @@ class LyapunovStabilityCheck:
                 params=fitted,
                 expected_v_decay=None,
                 reason="Stationary mean undefined (gamma ≤ 0)",
+                stable=False,
+                admissible=None,
+                d_star=None,
+                d_crit=d_crit,
             )
 
         # e_t = D_t - D*
@@ -227,69 +282,81 @@ class LyapunovStabilityCheck:
         slope = float(res.slope)  # type: ignore[union-attr]
         p_value = float(res.pvalue)  # type: ignore[union-attr]
 
-        # Verdict logic:
-        # - If gamma <= alpha: no strong enough restoring force -> divergent
-        # - Else if V(t) shows significant negative slope -> convergent
-        # - Else if slope not significantly different from zero -> inconclusive
-        # - Else (positive slope) -> divergent
-        if fitted.gamma <= fitted.alpha:
+        # gamma > 0 here, so gate (i) has passed: the process IS mean-reverting.
+        admissible = d_star < d_crit
+        significant = p_value < 0.05
+
+        # Gate (ii) — admissibility. Evaluated independently of the empirical
+        # check, because A.4 makes these two SEPARATE gates: a stable process
+        # that settles on an unacceptable attractor is INADMISSIBLE, not
+        # DIVERGENT and not INCONCLUSIVE. Checked before the empirical override
+        # since it is a negative verdict (it can never certify safety) and it
+        # carries strictly more information than a bare refusal — notably for a
+        # near-zero gamma, where D* = alpha/gamma explodes.
+        if not admissible:
             return StabilityReport(
-                verdict=StabilityVerdict.DIVERGENT,
+                verdict=StabilityVerdict.INADMISSIBLE,
                 params=fitted,
                 expected_v_decay=float(slope),
                 reason=(
-                    "No strong restoring force: "
-                    f"gamma ({fitted.gamma:.4f}) ≤ alpha ({fitted.alpha:.4f})"
+                    f"Mean-reverting (gamma={fitted.gamma:.4f} > 0) but the attractor "
+                    f"D*=alpha/gamma={d_star:.4f} is not below D_crit={d_crit:.4f}"
                 ),
+                stable=True,
+                admissible=False,
+                d_star=float(d_star),
+                d_crit=d_crit,
             )
 
-        if p_value < 0.05 and slope < 0:
+        # Empirical override (A.4): a significantly POSITIVE V(e) slope means the
+        # data contradicts the fitted model — refuse rather than certify.
+        if significant and slope > 0:
+            return StabilityReport(
+                verdict=StabilityVerdict.INCONCLUSIVE,
+                params=fitted,
+                expected_v_decay=float(slope),
+                reason=(
+                    f"Theoretically stable (gamma={fitted.gamma:.4f} > 0) and admissible "
+                    f"(D*={d_star:.4f} < D_crit={d_crit:.4f}) but empirical V(e) slope is "
+                    f"significantly positive (slope={slope:.6f}, p={p_value:.4f}) — "
+                    "fit contradicted, conservative INCONCLUSIVE"
+                ),
+                stable=True,
+                admissible=True,
+                d_star=float(d_star),
+                d_crit=d_crit,
+            )
+
+        if significant and slope < 0:
             return StabilityReport(
                 verdict=StabilityVerdict.CONVERGENT,
                 params=fitted,
                 expected_v_decay=float(slope),
                 reason=(
                     "Lyapunov function V(e) significantly decreasing "
-                    f"(slope={slope:.6f}, p={p_value:.4f})"
+                    f"(slope={slope:.6f}, p={p_value:.4f}); "
+                    f"attractor D*={d_star:.4f} < D_crit={d_crit:.4f}"
                 ),
+                stable=True,
+                admissible=True,
+                d_star=float(d_star),
+                d_crit=d_crit,
             )
 
-        if p_value >= 0.05 or abs(slope) < 1e-6:  # Not significant or essentially zero
-            return StabilityReport(
-                verdict=StabilityVerdict.INCONCLUSIVE,
-                params=fitted,
-                expected_v_decay=float(slope),
-                reason=(
-                    "No significant trend in V(e) "
-                    f"(slope={slope:.6f}, p={p_value:.4f})"
-                ),
-            )
-
-        # Ledger 2f: a significant POSITIVE V(e) slope contradicts the comment "→INCONCLUSIVE".
-        # Returning CONVERGENT here while V(e) is significantly *increasing* is wrong; the
-        # conservative and correct verdict is INCONCLUSIVE (theory says convergent but
-        # empirical evidence shows the opposite — we cannot certify stability).
-        if fitted.gamma > fitted.alpha and fitted.gamma >= 0.05:
-            return StabilityReport(
-                verdict=StabilityVerdict.INCONCLUSIVE,
-                params=fitted,
-                expected_v_decay=float(slope),
-                reason=(
-                    "Theoretically convergent "
-                    f"(gamma={fitted.gamma:.4f} > alpha={fitted.alpha:.4f}) "
-                    "but empirical V(e) slope is significantly positive "
-                    f"(slope={slope:.6f}, p={p_value:.4f}) — conservative INCONCLUSIVE"
-                ),
-            )
-
-        # Positive significant slope with gamma <= alpha or gamma too small: divergent
+        # Stable and admissible in theory, but the observed trajectory shows no
+        # significant trend either way — no empirical corroboration, so do not
+        # certify convergence.
         return StabilityReport(
-            verdict=StabilityVerdict.DIVERGENT,
+            verdict=StabilityVerdict.INCONCLUSIVE,
             params=fitted,
             expected_v_decay=float(slope),
             reason=(
-                "No restoring force: "
-                f"gamma ({fitted.gamma:.4f}) too small vs alpha ({fitted.alpha:.4f}); "
-                f"V(e) significantly increasing (slope={slope:.6f}, p={p_value:.4f})"
+                f"No significant trend in V(e) (slope={slope:.6f}, p={p_value:.4f}); "
+                f"stable and admissible in theory (D*={d_star:.4f} < D_crit={d_crit:.4f}) "
+                "but unconfirmed empirically"
             ),
+            stable=True,
+            admissible=True,
+            d_star=float(d_star),
+            d_crit=d_crit,
         )
