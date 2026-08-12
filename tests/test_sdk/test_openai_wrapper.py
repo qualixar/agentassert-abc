@@ -284,3 +284,42 @@ class TestDirectWrappedOpenAI:
         wrapped.chat.completions.create(model="gpt-4o", messages=_messages_no_tool())
         # No hard violations from the PostAction token recording.
         assert enforcer._violations.hard_count() == 0
+
+    def test_modified_kwargs_applied_when_pre_returns_modify(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Line 80 of openai_wrapper.py: when check_and_raise returns modified args,
+        the wrapper must merge them into kwargs before calling the inner client.
+
+        This tests the MODIFY decision path — where a contract can rewrite the
+        request (e.g., cap max_tokens) rather than just allow or deny it.
+        """
+        captured_kwargs: list[dict] = []
+
+        class _SpyCompletions(_FakeOpenAICompletions):
+            def create(self, **kwargs: Any) -> Any:
+                captured_kwargs.append(dict(kwargs))
+                return super().create(**kwargs)
+
+        class _SpyChat(_FakeOpenAIChat):
+            def __init__(self) -> None:
+                self.completions = _SpyCompletions()
+
+        class _SpyClient(_FakeOpenAI):
+            def __init__(self) -> None:
+                self.chat = _SpyChat()
+                self._extra_attr = "extra"
+
+        # Monkeypatch check_and_raise to return modified args (MODIFY path).
+        monkeypatch.setattr(
+            "agentassert_abc.sdk.wrappers.openai_wrapper.check_and_raise",
+            lambda enforcer, event: {"max_tokens": 7},
+        )
+        enforcer = SessionEnforcer.from_yaml(str(FIXTURES / "safety-minimal.yaml"))
+        wrapped = WrappedOpenAI(_SpyClient(), enforcer)
+        wrapped.chat.completions.create(
+            model="gpt-4o", messages=_messages_no_tool(), max_tokens=100
+        )
+        # The inner client must see the MODIFIED max_tokens (7), not the original (100).
+        assert len(captured_kwargs) == 1
+        assert captured_kwargs[0]["max_tokens"] == 7
