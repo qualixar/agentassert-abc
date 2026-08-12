@@ -25,14 +25,17 @@ it and the test will fail.
 
 from __future__ import annotations
 
-import asyncio
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
+
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import orjson
-import pytest
 from fastapi.responses import JSONResponse, StreamingResponse
 from httpx import ASGITransport, AsyncClient
 
@@ -116,7 +119,10 @@ def _openai_response_bytes(text: str = "hello world") -> bytes:
         {
             "id": "chatcmpl-test",
             "object": "chat.completion",
-            "choices": [{"message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "choices": [
+                {"message": {"role": "assistant", "content": text},
+                 "finish_reason": "stop"}
+            ],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         }
     )
@@ -126,7 +132,10 @@ def _fake_httpx_response(
     status: int = 200, body: bytes | None = None, headers: dict[str, str] | None = None
 ) -> httpx.Response:
     body = body or _openai_response_bytes()
-    return httpx.Response(status, content=body, headers=headers or {"content-type": "application/json"})
+    return httpx.Response(
+        status, content=body,
+        headers=headers or {"content-type": "application/json"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +178,9 @@ class TestDenyBeforeUpstream:
             AsyncMock(return_value=_fake_httpx_response()),
         )
         enforcer = _make_enforcer_with_blocklist(["blocked"])
-        result = await enforce_and_forward(_make_canonical(tool_name="blocked"), enforcer, _fake_request())
+        result = await enforce_and_forward(
+            _make_canonical(tool_name="blocked"), enforcer, _fake_request()
+        )
         assert result.headers.get("X-AgentAssert-Decision") == "deny"
 
     async def test_deny_includes_tool_name_in_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -345,7 +356,8 @@ class TestProviderError:
         """
         monkeypatch.setattr(
             "agentassert_abc.proxy.enforcement.forward_request",
-            AsyncMock(side_effect=httpx.HTTPStatusError("timeout", request=MagicMock(), response=MagicMock())),
+            AsyncMock(side_effect=httpx.HTTPStatusError(
+                "timeout", request=MagicMock(), response=MagicMock())),
         )
         enforcer = _make_permissive_enforcer()
         result = await enforce_and_forward(_make_canonical(), enforcer, _fake_request())
@@ -388,9 +400,11 @@ class TestHelperBranches:
     async def test_no_tool_calls_falls_back_to_provider_name(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When canonical has no tool_calls, tool_name = '{provider}.chat.completion'."""
-        called_with_tool: list[str] = []
+        """When canonical has no tool_calls, tool_name = '{provider}.chat.completion'.
 
+        Asserts the derived tool name reaching enforcement, not merely that the
+        request succeeded — a 200 would pass no matter what name was used.
+        """
         async def capturing_forward(*_args: Any, **_kwargs: Any) -> httpx.Response:
             return _fake_httpx_response()
 
@@ -398,12 +412,24 @@ class TestHelperBranches:
             "agentassert_abc.proxy.enforcement.forward_request", capturing_forward
         )
         enforcer = _make_permissive_enforcer()
+
+        seen_tools: list[str] = []
+        real_evaluate = enforcer.evaluate
+
+        def spy(event: Any) -> Any:
+            tool = getattr(event, "tool", None)
+            if tool is not None:
+                seen_tools.append(tool)
+            return real_evaluate(event)
+
+        monkeypatch.setattr(enforcer, "evaluate", spy)
         canonical = _make_canonical(provider="openai", tool_name=None)
 
         result = await enforce_and_forward(canonical, enforcer, _fake_request())
 
-        # Should allow (no tool_name means it defaults, and no blocklist either).
         assert result.status_code == 200
+        assert seen_tools, "enforcement saw no tool-bearing event"
+        assert seen_tools[0] == "openai.chat.completion"
 
     async def test_non_json_provider_body_does_not_raise(
         self, monkeypatch: pytest.MonkeyPatch

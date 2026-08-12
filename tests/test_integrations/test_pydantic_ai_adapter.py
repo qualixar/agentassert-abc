@@ -31,7 +31,6 @@ from agentassert_abc.dsl.parser import loads_contract
 from agentassert_abc.integrations.base import AgentAdapter
 from agentassert_abc.integrations.pydantic_ai import PydanticAIAdapter
 
-
 # ---------------------------------------------------------------------------
 # Contract helpers
 # ---------------------------------------------------------------------------

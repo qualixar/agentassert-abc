@@ -22,11 +22,14 @@ All tests use `click.testing.CliRunner` — no ports are bound.
 
 from __future__ import annotations
 
-import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
+
 from pathlib import Path
 from typing import Any
 
-import pytest
 from click.testing import CliRunner
 
 from agentassert_abc.proxy.cli import _warn_if_upstream_mismatch, cli
@@ -54,15 +57,17 @@ class TestStartMissingContract:
         assert result.exit_code == 1
 
     def test_missing_contract_shows_error_message(self, tmp_path: Path) -> None:
-        """Error output must mention 'Contract file not found' for debuggability."""
+        """Error output must mention 'Contract file not found' for debuggability.
+
+        Click 8.4.2 mixes stderr into result.output by default.
+        """
         runner = CliRunner()
         result = runner.invoke(
             cli,
             ["start", "--contract", str(tmp_path / "ghost.yaml")],
-            mix_stderr=False,
         )
-        # Click writes the error to stderr (err=True in the source).
-        assert "Contract file not found" in (result.output + str(result.stderr or ""))
+        # Click 8.4.2: err=True output is also in result.output.
+        assert "Contract file not found" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +207,10 @@ class TestStatusUnreachable:
     def test_status_http_error_shows_message(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The error message must contain 'Proxy not reachable'."""
+        """The error message must contain 'Proxy not reachable'.
+
+        Click 8.4.2 mixes err=True output into result.output.
+        """
         import httpx
 
         def _raise(*_: Any, **__: Any) -> None:
@@ -211,9 +219,9 @@ class TestStatusUnreachable:
         monkeypatch.setattr(httpx, "get", _raise)
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["status"], mix_stderr=False)
-        combined = result.output + str(result.stderr or "")
-        assert "Proxy not reachable" in combined
+        result = runner.invoke(cli, ["status"])
+        # Click 8.4.2: err=True output mixed into result.output.
+        assert "Proxy not reachable" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -222,27 +230,31 @@ class TestStatusUnreachable:
 
 
 class TestWarnIfUpstreamMismatch:
-    def test_no_warning_when_env_vars_absent(self, tmp_path: Path) -> None:
-        """No warning when no custom base URL env vars are set."""
+    def test_no_warning_when_env_vars_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No warning when no custom base URL env vars are set.
+
+        Call _warn_if_upstream_mismatch() directly (no env vars) and confirm
+        no warning text is emitted. This avoids Click version differences.
+        """
+        import io
+
         contract = tmp_path / "no-upstream.yaml"
         contract.write_text(
             "contractspec: '0.1'\nkind: agent\nname: t\ndescription: t\nversion: '1.0.0'\n"
         )
+        monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        runner = CliRunner(mix_stderr=False)
-        with runner.isolated_filesystem():
-            env_without_urls = {
-                k: v for k, v in os.environ.items()
-                if k not in ("ANTHROPIC_BASE_URL", "OPENAI_BASE_URL")
-            }
-            result = runner.invoke(
-                cli,
-                ["start", "--contract", str(contract)],
-                env=env_without_urls,
-                catch_exceptions=False,
-            )
-        # No "Warning:" in output since no custom env vars.
-        assert "Warning: non-default upstream" not in result.output
+        buf = io.StringIO()
+
+        def _capture(txt: str = "", **_: Any) -> None:
+            buf.write(txt + "\n")
+
+        monkeypatch.setattr("agentassert_abc.proxy.cli.click.echo", _capture)
+        _warn_if_upstream_mismatch(contract)
+        assert "Warning: non-default upstream" not in buf.getvalue()
 
     def test_warning_when_anthropic_env_set_no_upstream_in_contract(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -257,7 +269,6 @@ class TestWarnIfUpstreamMismatch:
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://custom.proxy.example.com")
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        output_lines: list[str] = []
         import io
 
         buf = io.StringIO()
@@ -283,7 +294,6 @@ class TestWarnIfUpstreamMismatch:
         monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://custom.proxy.example.com")
         monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-        output_lines: list[str] = []
         import io
 
         buf = io.StringIO()
