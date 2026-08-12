@@ -80,8 +80,15 @@ claude-code = [
 mcp = [
     "agentassert-abc[gateway]",
 ]
+# The framework-neutral enforcement bridge and its shims. The shims are
+# structurally typed against each framework's hook objects and import nothing at
+# module level, so this extra deliberately pulls in no agent framework — install
+# whichever you already use.
+enforce = [
+    "agentassert-abc[gateway]",
+]
 all = [
-    "agentassert-abc[yaml,math,llm,otel,gateway,proxy,sdk,claude-code,mcp]",
+    "agentassert-abc[yaml,math,llm,otel,gateway,proxy,sdk,claude-code,mcp,enforce]",
 ]
 
 [project.scripts]

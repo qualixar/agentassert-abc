@@ -116,7 +116,37 @@ including where enforcement is **not** possible.
 
 ---
 
-## Framework Integration
+## Enforce in Any Agent Framework
+
+`integrations/` **measures** a session after the fact. `enforce/` **stops** a
+tool before it runs. One neutral bridge backs every framework:
+
+```python
+from agentassert_abc.enforce import bridge_from_yaml
+from agentassert_abc.enforce.shims import crewai_before_tool_hook
+
+guard = bridge_from_yaml("contract.yaml", surface="crewai")
+crew = Crew(agents=[...], before_tool_call_hooks=[crewai_before_tool_hook(guard)])
+```
+
+| Framework | Denial mechanism |
+|---|---|
+| CrewAI | `BeforeToolCallHook` returns `False` |
+| LangChain / LangGraph | `wrap_tool_call` never calls the handler |
+| **DeerFlow** | built on LangGraph -- covered by the LangChain shim |
+| Microsoft Agent Framework | `FunctionMiddleware` never awaits `next` |
+| AgentScope | `pre__acting` hook raises |
+| Anything else | drive `EnforcementBridge` directly in ~6 lines |
+
+The shims are structurally typed and import nothing at module level, so
+`agentassert-abc[enforce]` pulls in **no agent framework**.
+
+**[docs/enforcement-coverage.md](docs/enforcement-coverage.md) — the full
+capability matrix, including where enforcement is impossible.**
+
+---
+
+## Framework Integration (Measurement)
 
 AgentAssert is **plug-and-play** with the major 2026 agent frameworks.
 

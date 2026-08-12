@@ -253,7 +253,7 @@ class TestPostActionDeny:
     def test_pii_filter_deny_withholds_the_output(self, monkeypatch) -> None:
         # The contract's own decision allows the response; the PII filter is a
         # second, independent gate over the returned text.
-        import agentassert_abc.mcp.guard as guard_mod
+        import agentassert_abc.enforce.bridge as guard_mod
 
         monkeypatch.setattr(
             guard_mod,
@@ -269,7 +269,7 @@ class TestPostActionDeny:
         assert guard.deny_count == 1
 
     def test_pii_filter_redact_masks_without_withholding(self, monkeypatch) -> None:
-        import agentassert_abc.mcp.guard as guard_mod
+        import agentassert_abc.enforce.bridge as guard_mod
 
         monkeypatch.setattr(guard_mod, "evaluate_pii_filter", lambda *_a, **_k: redact())
         monkeypatch.setattr(guard_mod, "apply_pii_redaction", lambda _t, _p: "[REDACTED:SSN]")
@@ -281,7 +281,7 @@ class TestPostActionDeny:
 
     def test_empty_result_text_skips_the_pii_filter(self, monkeypatch) -> None:
         called: list[int] = []
-        import agentassert_abc.mcp.guard as guard_mod
+        import agentassert_abc.enforce.bridge as guard_mod
 
         monkeypatch.setattr(guard_mod, "evaluate_pii_filter", lambda *_a, **_k: called.append(1))
         guard = McpGuard(StubEnforcer([allow(), allow()]))
@@ -290,7 +290,7 @@ class TestPostActionDeny:
         assert called == []
 
     def test_redact_on_the_response_masks_matched_patterns(self, monkeypatch) -> None:
-        import agentassert_abc.mcp.guard as guard_mod
+        import agentassert_abc.enforce.bridge as guard_mod
 
         monkeypatch.setattr(guard_mod, "apply_pii_redaction", lambda text, _p: "[MASKED]")
         guard = McpGuard(StubEnforcer([allow(), redact()]))
@@ -299,7 +299,7 @@ class TestPostActionDeny:
         assert relay.forward["result"]["content"][0]["text"] == "[MASKED]"
 
     def test_redact_decided_at_pre_action_still_applies_to_the_response(self, monkeypatch) -> None:
-        import agentassert_abc.mcp.guard as guard_mod
+        import agentassert_abc.enforce.bridge as guard_mod
 
         monkeypatch.setattr(guard_mod, "apply_pii_redaction", lambda text, _p: "[MASKED]")
         guard = McpGuard(StubEnforcer([redact(), allow()]))

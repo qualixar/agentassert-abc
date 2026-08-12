@@ -14,6 +14,12 @@ That split is deliberate: the Claude Code hook put its policy inline in
 ``main()``, which is why it shipped at 0% coverage. The same mistake is not
 repeated here.
 
+The contract decisions themselves come from
+:class:`~agentassert_abc.enforce.EnforcementBridge`, which every framework
+integration also uses. This module only translates between MCP's JSON-RPC
+vocabulary and the bridge's neutral one — it carries no policy of its own, so
+a change to how denials or redaction behave lands in one place, not two.
+
 **What this surface can and cannot enforce.** A ``PreAction`` DENY returns
 before the request reaches the downstream server, so a denied tool is never
 executed. A ``PostAction`` DENY happens after the server has already run the
@@ -25,13 +31,10 @@ are not equivalent and are not reported as if they were.
 from __future__ import annotations
 
 import threading
-import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from agentassert_abc.gateway.content.pii import apply_pii_redaction, evaluate_pii_filter
-from agentassert_abc.gateway.events import PostAction, PreAction
-from agentassert_abc.gateway.state import flatten_output
+from agentassert_abc.enforce.bridge import EnforcementBridge
 from agentassert_abc.mcp import jsonrpc
 
 if TYPE_CHECKING:
@@ -87,25 +90,27 @@ class McpGuard:
         session_id: str | None = None,
         fail_closed: bool = False,
     ) -> None:
-        self._enforcer = enforcer
+        self._bridge = EnforcementBridge(
+            enforcer,
+            surface="mcp",
+            session_id=session_id,
+            fail_closed=fail_closed,
+            base_state={"tool.server": server_label},
+        )
         self._server_label = server_label
-        self._session_id = session_id or f"mcp-{uuid.uuid4().hex[:12]}"
-        self._fail_closed = fail_closed
         self._pending: dict[Any, PendingCall] = {}
         self._lock = threading.Lock()
-        self._denied = 0
-        self._contract_id = getattr(enforcer._contract, "name", "unknown")
 
     # -- properties ---------------------------------------------------------
 
     @property
     def session_id(self) -> str:
-        return self._session_id
+        return self._bridge.session_id
 
     @property
     def deny_count(self) -> int:
         """Calls this guard blocked or whose output it withheld."""
-        return self._denied
+        return self._bridge.deny_count
 
     @property
     def pending_count(self) -> int:
@@ -129,36 +134,30 @@ class McpGuard:
         tool = jsonrpc.tool_call_name(message)
         args = jsonrpc.tool_call_arguments(message)
 
-        try:
-            result = self._enforcer.evaluate(
-                PreAction(
-                    session_id=self._session_id,
-                    contract_id=self._contract_id,
-                    tool=tool,
-                    args=args,
-                )
-            )
-        except Exception as exc:  # noqa: BLE001 — policy failure must not corrupt the stream.
-            return self._on_internal_error(message, req_id, tool, exc)
+        decision = self._bridge.before_tool(tool, args)
 
-        if result.is_deny():
-            self._denied += 1
+        if not decision.allowed:
             return Relay(
                 reply=jsonrpc.tool_error_result(
-                    req_id, _deny_text(tool, result.reason, result.violation_name)
+                    req_id, _deny_text(tool, decision.reason, decision.violation)
                 )
             )
 
         forward = message
-        args_used = args
-        if result.is_modify() and result.modified_args is not None:
-            forward = jsonrpc.with_tool_arguments(message, result.modified_args)
-            args_used = result.modified_args
+        if decision.modified:
+            forward = jsonrpc.with_tool_arguments(message, decision.arguments)
 
-        self._track(
-            req_id,
-            PendingCall(tool=tool, args=args_used, redact_on_return=result.is_redact()),
-        )
+        # A call the bridge could not evaluate is deliberately left untracked:
+        # scoring its response would report a violation caused by our own fault.
+        if decision.evaluated:
+            self._track(
+                req_id,
+                PendingCall(
+                    tool=tool,
+                    args=decision.arguments,
+                    redact_on_return=decision.redact_result,
+                ),
+            )
         return Relay(forward=forward)
 
     # -- server -> client ---------------------------------------------------
@@ -178,84 +177,30 @@ class McpGuard:
         if pending is None:
             return Relay(forward=message)
 
-        try:
-            return Relay(forward=self._screen_result(message, pending))
-        except Exception:  # noqa: BLE001 — a scoring failure must not eat the response.
-            # Deliberately fail-open even under `fail_closed`: the tool has
-            # already run, so withholding output here punishes the agent for the
-            # guard's own bug without preventing any side effect.
-            return Relay(forward=message)
-
-    def _screen_result(self, message: dict[str, Any], pending: PendingCall) -> dict[str, Any]:
-        result_payload = message.get("result")
-        text = jsonrpc.result_text(message)
-
-        state: dict[str, Any] = {
-            "tool.name": pending.tool,
-            "tool.server": self._server_label,
-        }
-        state.update(flatten_output(result_payload))
-        if text:
-            state.setdefault("output.text", text)
-
-        decision = self._enforcer.evaluate(
-            PostAction(
-                session_id=self._session_id,
-                contract_id=self._contract_id,
-                tool=pending.tool,
-                args=pending.args,
-                state=state,
-                result=result_payload,
-            )
+        outcome = self._bridge.after_tool(
+            pending.tool,
+            pending.args,
+            message.get("result"),
+            text=jsonrpc.result_text(message),
+            force_redact=pending.redact_on_return,
         )
 
-        if decision.is_deny():
+        if not outcome.allowed:
             # The tool already ran. Withholding its output still keeps the data
             # out of the model's context, which is the only thing left to
             # protect at this point.
-            self._denied += 1
-            return jsonrpc.tool_error_result(
-                jsonrpc.request_id(message),
-                _withheld_text(pending.tool, decision.reason, decision.violation_name),
-            )
-
-        redact = pending.redact_on_return or decision.is_redact()
-        if text:
-            pii = evaluate_pii_filter(
-                text, self._enforcer._compiled, self._enforcer._violations, is_streaming=False
-            )
-            if pii is not None and pii.is_deny():
-                self._denied += 1
-                return jsonrpc.tool_error_result(
-                    jsonrpc.request_id(message),
-                    _withheld_text(pending.tool, pii.reason, pii.violation_name),
+            return Relay(
+                forward=jsonrpc.tool_error_result(
+                    req_id, _withheld_text(pending.tool, outcome.reason, outcome.violation)
                 )
-            redact = redact or (pii is not None and pii.is_redact())
+            )
 
-        if redact and text:
-            masked = apply_pii_redaction(text, self._enforcer._compiled.pii_compiled_patterns)
-            return jsonrpc.with_result_text(message, masked)
+        if outcome.redacted:
+            return Relay(forward=jsonrpc.with_result_text(message, outcome.redacted_text or ""))
 
-        return message
+        return Relay(forward=message)
 
     # -- internals ----------------------------------------------------------
-
-    def _on_internal_error(
-        self, message: dict[str, Any], req_id: Any, tool: str, exc: Exception
-    ) -> Relay:
-        if self._fail_closed:
-            self._denied += 1
-            return Relay(
-                reply=jsonrpc.tool_error_result(
-                    req_id,
-                    f"AgentAssert blocked '{tool}': the contract could not be "
-                    f"evaluated and this guard runs fail-closed ({type(exc).__name__}).",
-                )
-            )
-        # Fail-open relays the ORIGINAL request. The call is deliberately left
-        # untracked: evaluation is already known to be broken for it, so scoring
-        # its response would report a violation caused by the guard's own fault.
-        return Relay(forward=message)
 
     def _track(self, req_id: Any, call: PendingCall) -> None:
         with self._lock:
