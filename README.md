@@ -89,6 +89,33 @@ print(f"Deploy-ready: {summary.theta >= 0.90}")
 
 ---
 
+## Enforce in Any MCP Client -- No Vendor Code
+
+Every coding agent that speaks MCP can be put under a contract by changing one
+line of its MCP config. The guard launches the real server as a child process
+and screens `tools/call` in both directions:
+
+```json
+{
+  "command": "agentassert-abc-mcp-guard",
+  "args": ["--contract", "contract.yaml", "--", "npx", "-y", "your-mcp-server"]
+}
+```
+
+A denied tool **never reaches the server**; the client gets an `isError` result
+explaining why, so the model can pick a different action instead of crashing.
+Works in Claude Code, Codex, Cursor, VS Code, Antigravity and Windsurf.
+
+```bash
+pip install "agentassert-abc[mcp]"
+```
+
+The guard sees MCP tools, not an agent's built-in editor or shell.
+[docs/mcp-guard.md](docs/mcp-guard.md) has the per-client coverage matrix,
+including where enforcement is **not** possible.
+
+---
+
 ## Framework Integration
 
 AgentAssert is **plug-and-play** with the major 2026 agent frameworks.

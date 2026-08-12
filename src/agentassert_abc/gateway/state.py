@@ -43,6 +43,10 @@ PROXY_PROVIDED_FIELDS: frozenset[str] = frozenset({
     "tool.name",
 })
 HOOK_PROVIDED_FIELDS: frozenset[str] = frozenset({"tool.name"})
+# The MCP guard sees the tool call and its result, and additionally knows which
+# downstream server it is guarding — so a contract can scope an invariant to one
+# server when several are guarded behind the same client.
+MCP_PROVIDED_FIELDS: frozenset[str] = frozenset({"tool.name", "tool.server"})
 
 _MAX_FLATTEN_DEPTH = 6
 

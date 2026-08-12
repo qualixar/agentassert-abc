@@ -74,13 +74,20 @@ claude-code = [
     "agentassert-abc[gateway]",
     "click>=8.1",
 ]
+# The MCP guard is the framework-neutral surface, so it stays as light as the
+# gateway itself: stdlib argparse, stdlib subprocess, and no dependency on the
+# third-party `mcp` distribution (it relays JSON-RPC, it does not model MCP).
+mcp = [
+    "agentassert-abc[gateway]",
+]
 all = [
-    "agentassert-abc[yaml,math,llm,otel,gateway,proxy,sdk,claude-code]",
+    "agentassert-abc[yaml,math,llm,otel,gateway,proxy,sdk,claude-code,mcp]",
 ]
 
 [project.scripts]
 agentassert-abc-proxy = "agentassert_abc.proxy.cli:cli"
 agentassert-abc-claude-code = "agentassert_abc.claude_code.cli:cli"
+agentassert-abc-mcp-guard = "agentassert_abc.mcp.cli:cli"
 
 [build-system]
 requires = ["hatchling"]
