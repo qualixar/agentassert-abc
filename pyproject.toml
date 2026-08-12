@@ -1,6 +1,6 @@
 [project]
 name = "agentassert-abc"
-version = "0.6.0"
+version = "0.7.0"
 description = "Formal behavioral specification and runtime enforcement for autonomous AI agents. Agent Behavioral Contracts (ABC)."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -74,13 +74,27 @@ claude-code = [
     "agentassert-abc[gateway]",
     "click>=8.1",
 ]
+# The MCP guard is the framework-neutral surface, so it stays as light as the
+# gateway itself: stdlib argparse, stdlib subprocess, and no dependency on the
+# third-party `mcp` distribution (it relays JSON-RPC, it does not model MCP).
+mcp = [
+    "agentassert-abc[gateway]",
+]
+# The framework-neutral enforcement bridge and its shims. The shims are
+# structurally typed against each framework's hook objects and import nothing at
+# module level, so this extra deliberately pulls in no agent framework — install
+# whichever you already use.
+enforce = [
+    "agentassert-abc[gateway]",
+]
 all = [
-    "agentassert-abc[yaml,math,llm,otel,gateway,proxy,sdk,claude-code]",
+    "agentassert-abc[yaml,math,llm,otel,gateway,proxy,sdk,claude-code,mcp,enforce]",
 ]
 
 [project.scripts]
 agentassert-abc-proxy = "agentassert_abc.proxy.cli:cli"
 agentassert-abc-claude-code = "agentassert_abc.claude_code.cli:cli"
+agentassert-abc-mcp-guard = "agentassert_abc.mcp.cli:cli"
 
 [build-system]
 requires = ["hatchling"]

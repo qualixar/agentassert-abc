@@ -270,3 +270,40 @@ version: "1.0.0"
         adapter = GenericAdapter(contract)
         # Protocol structural check — isinstance works with runtime_checkable
         assert isinstance(adapter, AgentAdapter)
+
+
+class TestStateFlatteningMatchesTheEnforcementPlane:
+    """One contract must behave the same on both planes.
+
+    The evaluator reads literal dotted keys (H-16). The enforcement plane
+    flattens tool output into `output.*`; this adapter used to return a nested
+    dict unchanged, so the *same* contract field resolved under enforcement and
+    silently scored False forever under measurement.
+    """
+
+    def test_nested_output_gains_dotted_keys(self) -> None:
+        state = GenericAdapter.extract_state(None, {"output": {"pii_detected": False}})
+        assert state["output.pii_detected"] is False
+
+    def test_deeply_nested_values_are_reachable(self) -> None:
+        state = GenericAdapter.extract_state(None, {"a": {"b": {"c": 1}}})
+        assert state["a.b.c"] == 1
+
+    def test_original_keys_are_preserved(self) -> None:
+        # Additive: a contract written against already-flat state is unaffected.
+        state = GenericAdapter.extract_state(None, {"turn": 3, "output": {"safe": True}})
+        assert state["turn"] == 3
+        assert state["output"] == {"safe": True}
+
+    def test_already_flat_state_is_unchanged(self) -> None:
+        assert GenericAdapter.extract_state(None, {"a": 1, "b.c": 2}) == {"a": 1, "b.c": 2}
+
+    def test_both_planes_produce_the_same_key_for_the_same_field(self) -> None:
+        from agentassert_abc.gateway.state import flatten_output
+
+        payload = {"pii_detected": False}
+        enforcement = flatten_output(payload)
+        measurement = GenericAdapter.extract_state(None, {"output": payload})
+        assert "output.pii_detected" in enforcement
+        assert "output.pii_detected" in measurement
+        assert enforcement["output.pii_detected"] == measurement["output.pii_detected"]

@@ -89,7 +89,64 @@ print(f"Deploy-ready: {summary.theta >= 0.90}")
 
 ---
 
-## Framework Integration
+## Enforce in Any MCP Client -- No Vendor Code
+
+Every coding agent that speaks MCP can be put under a contract by changing one
+line of its MCP config. The guard launches the real server as a child process
+and screens `tools/call` in both directions:
+
+```json
+{
+  "command": "agentassert-abc-mcp-guard",
+  "args": ["--contract", "contract.yaml", "--", "npx", "-y", "your-mcp-server"]
+}
+```
+
+A denied tool **never reaches the server**; the client gets an `isError` result
+explaining why, so the model can pick a different action instead of crashing.
+Works in Claude Code, Codex, Cursor, VS Code, Antigravity and Windsurf.
+
+```bash
+pip install "agentassert-abc[mcp]"
+```
+
+The guard sees MCP tools, not an agent's built-in editor or shell.
+[docs/mcp-guard.md](docs/mcp-guard.md) has the per-client coverage matrix,
+including where enforcement is **not** possible.
+
+---
+
+## Enforce in Any Agent Framework
+
+`integrations/` **measures** a session after the fact. `enforce/` **stops** a
+tool before it runs. One neutral bridge backs every framework:
+
+```python
+from agentassert_abc.enforce import bridge_from_yaml
+from agentassert_abc.enforce.shims import crewai_before_tool_hook
+
+guard = bridge_from_yaml("contract.yaml", surface="crewai")
+crew = Crew(agents=[...], before_tool_call_hooks=[crewai_before_tool_hook(guard)])
+```
+
+| Framework | Denial mechanism |
+|---|---|
+| CrewAI | `BeforeToolCallHook` returns `False` |
+| LangChain / LangGraph | `wrap_tool_call` never calls the handler |
+| **DeerFlow** | built on LangGraph -- covered by the LangChain shim |
+| Microsoft Agent Framework | `FunctionMiddleware` never awaits `next` |
+| AgentScope | `pre__acting` hook raises |
+| Anything else | drive `EnforcementBridge` directly in ~6 lines |
+
+The shims are structurally typed and import nothing at module level, so
+`agentassert-abc[enforce]` pulls in **no agent framework**.
+
+**[docs/enforcement-coverage.md](docs/enforcement-coverage.md) — the full
+capability matrix, including where enforcement is impossible.**
+
+---
+
+## Framework Integration (Measurement)
 
 AgentAssert is **plug-and-play** with the major 2026 agent frameworks.
 

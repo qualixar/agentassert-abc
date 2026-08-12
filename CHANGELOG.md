@@ -4,7 +4,59 @@ All notable changes to `agentassert-abc` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] — unreleased
+## [0.7.0] — unreleased
+
+Enforcement stops being tied to a vendor. Until now a contract could only be
+enforced through one of three specific surfaces — an LLM wire format, a vendor
+SDK client, or the Claude Code hook — and the framework integrations could only
+*measure*. This release makes enforcement available anywhere an agent runs.
+
+### Added
+
+- **MCP guard** (`agentassert_abc.mcp`, `agentassert-abc-mcp-guard`) — wraps a
+  downstream MCP server and screens every `tools/call` against a contract. A
+  denied call is answered before the server sees it, so the tool never runs.
+  Installed by changing the server's launch command in the client's MCP config,
+  which covers Claude Code, Codex, Cursor, VS Code, Antigravity and Windsurf
+  with no client-specific code.
+
+  It relays JSON-RPC rather than modelling MCP: it recognises one method and
+  passes everything else through byte-for-byte, including methods added by later
+  revisions of the protocol. It therefore takes **no dependency** on the
+  third-party `mcp` distribution.
+
+- **Enforcement bridge** (`agentassert_abc.enforce`) — the framework-neutral
+  form of "may this tool run": `before_tool()` returns a verdict before
+  execution, `after_tool()` scores the result. This is now the single place
+  contract decisions are made; the MCP guard delegates to it rather than
+  carrying a second copy of the logic.
+
+- **Framework shims** (`agentassert_abc.enforce.shims`) — CrewAI, LangChain and
+  LangGraph, Microsoft Agent Framework, and AgentScope, each translating that
+  framework's own hook and veto convention. DeerFlow is covered by the LangGraph
+  path. Anything unsupported can drive the bridge directly in a few lines.
+
+  The shims are matched to their framework by shape rather than by importing it,
+  so `agentassert-abc[enforce]` pulls in **no agent framework**.
+
+- **`docs/enforcement-coverage.md`** — where enforcement is possible per client
+  and per framework, and where only measurement is. Copilot, Antigravity and
+  Windsurf route their built-in editor and shell through neither MCP nor any
+  hook; that limit is stated in the table rather than left implicit.
+
+### Changed
+
+- A tool call whose contract could not be evaluated is now marked as such and
+  its result is no longer scored. Previously an evaluation failure could be
+  followed by scoring the result, recording the agent as violating an invariant
+  that never actually ran.
+
+### Fixed
+
+- The Claude Code hook, installer and CLI shipped with no tests and the hook had
+  been changed in 0.6.0. Coverage for that package goes from 0% to 95%.
+
+## [0.6.0] — 2026-08-12
 
 ### Added
 
