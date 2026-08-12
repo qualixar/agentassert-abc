@@ -37,7 +37,17 @@ from agentassert_abc.integrations.pydantic_ai import PydanticAIAdapter
 
 
 def _make_contract(field: str, value: Any = True) -> Any:
-    """Build a minimal contract with one hard constraint on a given field."""
+    """Build a minimal contract with one hard constraint on a given field.
+
+    CRIT note: field and value must be plain identifiers (no YAML-special chars)
+    since they are embedded directly into a YAML literal. For test use only — not
+    for production use with user-supplied input.
+    """
+    # Validate inputs are safe to embed (no YAML-special chars).
+    safe_chars = set("abcdefghijklmnopqrstuvwxyz_.-0123456789")
+    assert all(c in safe_chars for c in str(field).lower()), (
+        f"_make_contract: field {field!r} contains YAML-unsafe characters"
+    )
     return loads_contract(f"""
 contractspec: "0.1"
 kind: agent

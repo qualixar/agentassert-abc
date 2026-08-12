@@ -139,16 +139,24 @@ class TestMomentLpAllSuccessBounds:
 
         This is the 'not len(singles) == m' branch. Supplying only pairwise
         moments (order-2) for a 3-stage pipeline gives 3 pairwise subsets but
-        zero singles — the fallback floor is 0.0 and ceiling is 1.0.
+        zero singles — the fallback sets fl_lo=0.0, fl_hi=1.0 (the cap used
+        when clipping the LP result).
+
+        Key invariant: the LP still SOLVES (feasible=True) because consistent
+        pairwise moments always admit a valid joint. The lower bound is non-trivial
+        (> 0) because the LP extracts information from the pairwise structure.
         """
         m = 3
         # Only pairwise subsets: (0,1), (0,2), (1,2) — no single-stage moments.
         subs = ((0, 1), (0, 2), (1, 2))
         vals = (0.81, 0.81, 0.81)  # independent 0.9-stages → P_ij = 0.9^2
         result = moment_lp_all_success_bounds(m, subs, vals)
-        # The function should run without error and return a MomentLPBounds.
-        # When feasible, floor ≥ 0 and upper ≤ 1 are the valid guarantees.
-        assert 0.0 <= result.lower <= result.upper <= 1.0
+        # LP must be feasible (consistent pairwise moments have a valid joint).
+        assert result.feasible is True
+        # The LP extracts non-trivial information from pairwise moments alone —
+        # lower > 0 even without marginals. Vacuous Fréchet floor would be 0.0.
+        assert result.lower > 0.0
+        assert result.lower <= result.upper <= 1.0
         assert result.m == m
 
     def test_vacuous_fallback_ceiling_is_one_when_only_pairwise(self) -> None:

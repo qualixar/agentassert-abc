@@ -209,12 +209,24 @@ class TestFitBoundary:
         This cross-checks that the standalone accessor returns the same value
         the fitter computed and stored — a regression guard against drift between
         the two code paths.
+
+        Uses a well-conditioned OU sequence (n=300, strong mean-reversion) that
+        is guaranteed to converge, so pytest.fail is correct on non-convergence.
         """
         fitter = OUFitter()
-        seq = _ou_sample(alpha=0.3, gamma=0.8, sigma=0.05, n=100, seed=7)
+        # Long sequence with strong mean-reversion — convergence is deterministic.
+        seq = _ou_sample(alpha=0.5, gamma=2.0, sigma=0.1, n=300, seed=42)
         params = fitter.fit(seq)
-        if params is None or params.gamma == 0.0:
-            pytest.skip("fit() did not converge to a non-degenerate solution")
+        if params is None:
+            pytest.fail(
+                "fit() returned None on a well-conditioned n=300 sequence — "
+                "optimizer convergence regression"
+            )
+        if params.gamma == 0.0:
+            pytest.fail(
+                "fit() returned degenerate gamma=0 on a non-constant sequence — "
+                "MLE returned the constant attractor instead of the OU attractor"
+            )
         accessor_value = fitter.stationary_drift(params)
         assert accessor_value is not None
         assert accessor_value == pytest.approx(params.stationary_drift, rel=1e-6)
