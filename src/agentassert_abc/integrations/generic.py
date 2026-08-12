@@ -20,6 +20,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from agentassert_abc.exceptions import ContractBreachError, StateExtractionError
+from agentassert_abc.gateway.state import flatten_state
 from agentassert_abc.monitor.session import SessionMonitor
 
 if TYPE_CHECKING:
@@ -43,16 +44,27 @@ class GenericAdapter:
         self._lock = threading.Lock()  # C-03: Thread safety
 
     def extract_state(self, output: Any) -> dict[str, Any]:
-        """Extract state from output. For dicts, returns as-is.
+        """Extract state from output, flattening nested keys to dotted paths.
+
+        The evaluator looks fields up as literal dotted keys — ``output.safe``,
+        never ``output["safe"]`` (H-16). Returning a nested dict unchanged
+        therefore meant a contract written against ``output.safe`` scored
+        ``False`` on every step no matter how the agent behaved, while the *same
+        contract* evaluated correctly on the enforcement plane, which flattens.
+        This makes both planes agree.
+
+        The transformation is additive: every key the caller supplied survives
+        untouched, so already-flat state is unaffected.
 
         Args:
             output: Agent output — must be a dict.
 
         Returns:
-            The output dict unchanged.
+            A flat copy: the original entries plus a dotted alias for each
+            nested value.
 
         Raises:
-            TypeError: If output is not a dict.
+            StateExtractionError: If output is not a dict.
         """
         if not isinstance(output, dict):
             msg = (
@@ -60,7 +72,7 @@ class GenericAdapter:
                 "Use a framework-specific adapter for non-dict outputs."
             )
             raise StateExtractionError(msg)
-        return dict(output)  # Immutable copy
+        return flatten_state(output)  # Immutable copy, dotted paths added
 
     def check(self, agent_output: dict[str, Any]) -> StepResult:
         """Evaluate agent output against the contract.
@@ -97,10 +109,7 @@ class GenericAdapter:
         if result.hard_violations > 0:
             # CRITICAL fix: Use only hard violation names, not all violated_names
             violated = ", ".join(result.violated_hard_names)
-            msg = (
-                f"Hard contract breach: {result.hard_violations} violation(s) "
-                f"[{violated}]"
-            )
+            msg = f"Hard contract breach: {result.hard_violations} violation(s) [{violated}]"
             raise ContractBreachError(msg)
 
         return result

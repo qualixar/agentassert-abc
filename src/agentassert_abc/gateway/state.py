@@ -34,14 +34,16 @@ RESPONSE_NAMESPACE = "output."
 # A constraint outside `output.` and outside its surface's set can never be
 # satisfied there, so the contract is rejected at load rather than scoring the
 # agent as violating forever.
-PROXY_PROVIDED_FIELDS: frozenset[str] = frozenset({
-    "latency_ms",
-    "response.bytes",
-    "response.latency_ms",
-    "response.status",
-    "response.streamed",
-    "tool.name",
-})
+PROXY_PROVIDED_FIELDS: frozenset[str] = frozenset(
+    {
+        "latency_ms",
+        "response.bytes",
+        "response.latency_ms",
+        "response.status",
+        "response.streamed",
+        "tool.name",
+    }
+)
 HOOK_PROVIDED_FIELDS: frozenset[str] = frozenset({"tool.name"})
 # The MCP guard sees the tool call and its result, and additionally knows which
 # downstream server it is guarding — so a contract can scope an invariant to one
@@ -92,6 +94,36 @@ def flatten_output(payload: Any, prefix: str = "output") -> dict[str, Any]:
             return state
     state[f"{prefix}.raw"] = str(payload)
     return state
+
+
+def flatten_state(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a state dict in place of its own namespace, adding dotted paths.
+
+    Unlike :func:`flatten_output` this adds **no prefix**: top-level keys keep
+    the names the caller gave them, and nested mappings gain dotted aliases.
+    ``{"output": {"safe": True}}`` becomes
+    ``{"output": {...}, "output.safe": True}``.
+
+    This is what lets one contract behave identically on both planes. The
+    enforcement plane flattens tool output into ``output.*``; a framework
+    adapter that passed a nested dict straight through produced
+    ``state["output"]["safe"]``, which the evaluator never looks up (it reads
+    literal dotted keys, H-16), so the invariant scored ``False`` forever. The
+    transformation is purely additive — every original key survives — so a
+    contract written against already-flat state is unaffected.
+
+    Args:
+        mapping: the caller's state dict.
+
+    Returns:
+        A new dict with the original entries plus a dotted alias for every
+        nested value.
+    """
+    out: dict[str, Any] = dict(mapping)
+    for key, value in mapping.items():
+        if isinstance(value, dict):
+            _flatten_mapping(value, str(key), out, depth=0)
+    return out
 
 
 def _flatten_mapping(
