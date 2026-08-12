@@ -5,11 +5,9 @@
 
 """Claude Code hook adapter — enforce contracts on PreToolUse/PostToolUse.
 
-Ported from `agentassert-typec-claude-code` (MIT) into
-`agentassert_abc.claude_code` (AGPL-3.0-or-later) per the port-delta
-(item #30 — 100% additive). The `case_study/` subdirectory was NOT ported:
-it contained fabricated benchmark numbers and personal `~/.claude/*` config
-filenames — neither belongs in a published package.
+Reads a hook event on stdin and writes an allow / block / modify decision on
+stdout. Fail-open by design: any error reading the event, loading the contract,
+or evaluating it allows the tool call through rather than blocking the session.
 
 Install with the ``claude-code`` extra: ``pip install agentassert-abc[claude-code]``.
 """

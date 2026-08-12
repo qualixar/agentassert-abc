@@ -6,9 +6,9 @@
 """FastAPI app factory — the AgentAssert enforcement proxy.
 
 Ported from agentassert-typec's `server.py`. `SessionMonitor` ->
-`SessionEnforcer` throughout (port-delta §C4). The `/status` endpoint's
+`SessionEnforcer` throughout. The `/status` endpoint's
 drift section is built via `enforcer._build_drift_report()` — abc v2's
-`DriftTracker` has no `report()` method (port-delta §C7); the enforcer's
+`DriftTracker` has no `report()` method; the enforcer's
 own drift-report builder is the correct replacement.
 """
 

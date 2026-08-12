@@ -6,7 +6,7 @@
 """Semantic validation for the enforcement-plane `process:` block.
 
 Ported from agentassert-typec's `dsl/validator.py::validate_extended`
-(port-delta §F.4). Complements the base semantic validator
+. Complements the base semantic validator
 (`agentassert_abc.dsl.validator.validate_contract`): this one walks the
 legacy list-of-operators form of `invariants.process` and produces
 human-readable `ValidationError`s. The dict form is fully validated

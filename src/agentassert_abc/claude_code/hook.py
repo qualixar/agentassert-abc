@@ -6,7 +6,7 @@
 """Stdin/stdout hook for Claude Code's PreToolUse/PostToolUse events.
 
 Ported from agentassert-typec-claude-code's `hook.py`. `SessionMonitor` ->
-`SessionEnforcer` (port-delta §C4). Fail-open by design: any error reading
+`SessionEnforcer`. Fail-open by design: any error reading
 stdin, loading the contract, or evaluating the event allows the tool call
 through rather than blocking the user's session — matches typec's original
 behavior, appropriate for a hook that must never hang or crash Claude Code.

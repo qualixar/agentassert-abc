@@ -6,7 +6,7 @@
 """SessionStore — SQLite WAL, write-behind key/value session persistence.
 
 Ported unchanged from agentassert-typec's `persistence/sqlite_store.py`
-(port-delta §A.2, item #23).
+.
 """
 
 from __future__ import annotations

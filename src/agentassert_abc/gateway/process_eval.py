@@ -6,9 +6,9 @@
 """Process-plane operator evaluators: tool_blocklist, must_precede,
 tool_allowlist, must_state, context_budget, process_drift.
 
-Ported from agentassert-typec's `evaluator/process_eval.py` (port-delta
-§A.2, item #18). All 5 "PreAction gate" evaluators are unchanged from
-typec. `evaluate_turn_end_soft` (process_drift) is REWRITTEN — port-delta
+Ported from the Type C process evaluator. All five "PreAction gate"
+evaluators are unchanged from
+typec. `evaluate_turn_end_soft` (process_drift) is REWRITTEN —
 §C7: abc v2's `DriftTracker` has no `current_jsd()`. The closest available
 signal is the most recent composite D(t) recorded in `drift.history`
 (mixing compliance + distributional shift, not pure JSD like typec's

@@ -6,7 +6,7 @@
 """Shared pre-call enforcement helpers for the SDK wrappers.
 
 Ported from agentassert-typec-sdk's `enforcement.py`. `SessionMonitor` ->
-`SessionEnforcer` (port-delta §C4).
+`SessionEnforcer`.
 """
 
 from __future__ import annotations

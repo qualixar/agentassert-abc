@@ -6,7 +6,7 @@
 """CompiledContract — AST-compiles a ContractSpecExtended's process/content
 operators into pre-compiled regex patterns and lookup structures.
 
-Ported from agentassert-typec's `dsl/ast_compiler.py` (port-delta §A.2,
+Ported from agentassert-typec's `dsl/ast_compiler.py` (,
 item #25). Import paths updated to reuse the already-ported
 `agentassert_abc.process.models` (Phase A) instead of duplicating them.
 """

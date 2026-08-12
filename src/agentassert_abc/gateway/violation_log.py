@@ -5,7 +5,7 @@
 
 """ViolationLog — bounded in-memory log of enforcement decisions.
 
-Ported unchanged from agentassert-typec (port-delta §A.2, item #24).
+Ported unchanged from agentassert-typec.
 """
 
 from __future__ import annotations

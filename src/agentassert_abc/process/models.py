@@ -9,7 +9,7 @@ These models extend the measurement-plane ContractSpec (agentassert_abc.models)
 with the *enforcement* plane ported from agentassert-typec: real-time process
 invariants, content operators, and the ALLOW/DENY/REDACT/MODIFY decision types.
 
-Design (port-delta §D): the shared base models (ConstraintCheck, Invariants,
+Design: the shared base models (ConstraintCheck, Invariants,
 RecoveryConfig, ContractSpec, SatisfactionParams, DriftWeights, …) are REUSED
 from agentassert_abc.models — never duplicated. This module only adds the new,
 additive enforcement types and thin `*Extended` subclasses. All abc v2 field

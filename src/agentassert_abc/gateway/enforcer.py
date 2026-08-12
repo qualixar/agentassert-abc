@@ -6,7 +6,7 @@
 """SessionEnforcer — event-driven real-time enforcement orchestrator.
 
 Ported from agentassert-typec's `monitor/session.py::SessionMonitor`
-(port-delta §C4, item #7 — FATAL rename). abc v2 already has a
+. abc v2 already has a
 `SessionMonitor` (the *measurement* plane, step-driven,
 `agentassert_abc.monitor.session.SessionMonitor`). Reusing that name here
 would silently shadow one or the other on import. This class is the typec
@@ -306,7 +306,7 @@ def _schedule_judge_task(
     async def _run() -> None:
         # Fail-open by design (this is a fire-and-forget background task that
         # must never crash the caller's event loop) — but NOT silent. Unlike
-        # typec's bare `except Exception: pass` (port-delta CRIT note), any
+        # typec's bare `except Exception: pass`, any
         # failure is logged. `apply_penalty` is a real method on abc v2's
         # `ThetaScorer` (Phase B) — silent-break #2 (AttributeError swallowed
         # here in typec) cannot recur.

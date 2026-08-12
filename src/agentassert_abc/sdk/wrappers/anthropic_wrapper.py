@@ -6,7 +6,7 @@
 """WrappedAnthropic — enforced drop-in for `anthropic.Anthropic`/`AsyncAnthropic`.
 
 Ported from agentassert-typec-sdk's `anthropic_wrapper.py`. `SessionMonitor`
--> `SessionEnforcer` (port-delta §C4).
+-> `SessionEnforcer`.
 
 Sync/async dispatch: typec's original only ever called the wrapped client's
 methods synchronously, which silently returns an un-awaited coroutine (never

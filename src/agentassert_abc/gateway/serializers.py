@@ -5,14 +5,14 @@
 
 """Serializers for SessionEnforcer sub-systems <-> SessionStore.
 
-Ported from agentassert-typec's `persistence/serializers.py` (port-delta
-§A.2, item #23). `dump_theta`/`load_theta` are unchanged (abc v2's
+Ported from the Type C persistence serializers. `dump_theta`/`load_theta`
+are unchanged (abc v2's
 `ThetaScorer`, from Phase B, keeps the exact same private field names as
 typec's). `dump_drift`/`load_drift` are REWRITTEN — abc v2's
 `agentassert_abc.metrics.drift.DriftTracker` has a completely different
 internal shape (`_history`, `_action_window`, `_reference`, `_config`) from
 typec's discarded tracker (`_call_sequence`, `_baseline_counts`,
-`_current_counts`, `_total_updates`); see port-delta §C7.
+`_current_counts`, `_total_updates`); see
 
 Rules (carried over from typec):
 - `_seen_tools_turn` is NOT persisted (per-turn, resets every turn).
@@ -66,7 +66,7 @@ def load_theta(theta: ThetaScorer, data: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# DriftTracker (abc v2 API — port-delta §C7 rewrite, NOT typec's shape)
+# DriftTracker (abc v2 API rewrite, NOT typec's shape)
 # ---------------------------------------------------------------------------
 
 

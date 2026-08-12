@@ -6,7 +6,7 @@
 """wrap() — dispatch to the right provider wrapper by client type.
 
 Ported from agentassert-typec-sdk's `wrapper.py`. `SessionMonitor.from_yaml`
--> `SessionEnforcer.from_yaml` (port-delta §C4).
+-> `SessionEnforcer.from_yaml`.
 """
 
 from __future__ import annotations

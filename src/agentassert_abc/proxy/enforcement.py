@@ -7,7 +7,7 @@
 
 Ported from agentassert-typec's `enforcement.py`. Renamed `monitor` (typec's
 `SessionMonitor`) to `enforcer` (:class:`~agentassert_abc.gateway.SessionEnforcer`)
-throughout — port-delta §C4. Cost/PII helpers are the already-ported,
+throughout Cost/PII helpers are the already-ported,
 public-named versions in `agentassert_abc.gateway.content` (`update_cost`,
 not typec's private `_update_cost`; same for `extract_usage`,
 `parse_streaming_usage`, `apply_pii_redaction`).

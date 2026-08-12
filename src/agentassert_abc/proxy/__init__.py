@@ -6,7 +6,7 @@
 """Proxy — FastAPI HTTP forwarding proxy (Type C consolidation, Phase E1).
 
 Ported from `agentassert-typec-proxy` (MIT) into `agentassert_abc.proxy`
-(AGPL-3.0-or-later) per the port-delta (item #28 — 100% additive). Sits
+(AGPL-3.0-or-later). Sits
 between an agent's LLM client and the upstream provider API, routing every
 request through :class:`agentassert_abc.gateway.SessionEnforcer` before
 forwarding.
