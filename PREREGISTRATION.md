@@ -86,7 +86,7 @@ Exactly these values for every call.
 
 ## 6. Outcomes storage
 
-Per-arm JSONL at `AgentAssert-private/experiments-baseline/frontier_<condition>.jsonl`
+Per-arm JSONL at `experiments-baseline/frontier_<condition>.jsonl`
 (+ `.progress.json`, `.failures.jsonl`). Analysis reproduces from these logs.
 
 ## 7. What would falsify the thesis
