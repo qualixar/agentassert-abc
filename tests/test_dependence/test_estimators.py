@@ -21,6 +21,7 @@ import pytest
 
 from agentassert_abc.dependence.estimators import (
     CoFailureTable,
+    jaccard,
     kendall_tau_a,
     one_factor_loadings,
     phi_coefficient,
@@ -50,6 +51,67 @@ def test_cofailure_table_is_immutable() -> None:
 def test_from_pairs_rejects_length_mismatch() -> None:
     with pytest.raises(DependenceError):
         CoFailureTable.from_pairs([1, 0], [1])
+
+
+def test_jaccard_identical_failure_sets_is_one() -> None:
+    # Every failure is shared -> union == intersection -> 1.0.
+    t = CoFailureTable(n11=40, n10=0, n01=0, n00=60)
+    assert jaccard(t) == pytest.approx(1.0)
+
+
+def test_jaccard_disjoint_failure_sets_is_zero() -> None:
+    # No mission failed both -> empty intersection over a non-empty union.
+    t = CoFailureTable(n11=0, n10=30, n01=20, n00=50)
+    assert jaccard(t) == pytest.approx(0.0)
+
+
+def test_jaccard_ignores_the_both_passed_cell() -> None:
+    # n00 is excluded by construction: growing it must not move the statistic.
+    # This is the property that keeps Jaccard informative when failures are rare
+    # (and is exactly where tau_a gets squeezed by its marginal ceiling).
+    small = CoFailureTable(n11=10, n10=5, n01=5, n00=1)
+    huge = CoFailureTable(n11=10, n10=5, n01=5, n00=1_000_000)
+    assert jaccard(small) == pytest.approx(0.5)
+    assert jaccard(huge) == pytest.approx(jaccard(small))
+
+
+def test_jaccard_nested_failures_equals_rarer_agents_share() -> None:
+    # Grok arm shape: n10 = 0, so A's failures are a subset of B's and the
+    # overlap collapses to n11/(n11+n01) -- the comonotone/nested extreme.
+    t = CoFailureTable(n11=33, n10=0, n01=80, n00=1788)
+    assert jaccard(t) == pytest.approx(33 / 113)
+
+
+def test_jaccard_undefined_when_neither_agent_ever_failed() -> None:
+    # Empty failure union: must refuse, not report 0.0 ("no overlap"), which
+    # would be a materially different claim from "no failures observed".
+    t = CoFailureTable(n11=0, n10=0, n01=0, n00=500)
+    with pytest.raises(DependenceError, match="undefined"):
+        jaccard(t)
+
+
+@pytest.mark.parametrize(
+    ("condition", "cells", "expected"),
+    [
+        ("same_model", (2177, 189, 52, 3582), 0.90),
+        ("different_vendor", (1987, 289, 225, 3499), 0.79),
+        ("same_vendor", (2289, 66, 757, 2888), 0.74),
+        ("diff_vendor_grok", (33, 0, 80, 1788), 0.29),
+        ("diff_vendor_meta", (1, 0, 9, 625), 0.10),
+    ],
+)
+def test_jaccard_reproduces_paper_table_1(
+    condition: str, cells: tuple[int, int, int, int], expected: float
+) -> None:
+    """Paper v2 Table 1's published Jaccard column, to its stated 2dp.
+
+    This is a paper<->code parity test: the values are transcribed from the
+    published table, not from this implementation's output, so the test fails
+    if either side drifts. ``condition`` is carried for failure readability.
+    """
+    n11, n10, n01, n00 = cells
+    t = CoFailureTable(n11=n11, n10=n10, n01=n01, n00=n00)
+    assert jaccard(t) == pytest.approx(expected, abs=5e-3), condition
 
 
 def test_tau_a_perfect_coupling_fair_coins_is_half() -> None:

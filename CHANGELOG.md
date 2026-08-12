@@ -4,7 +4,24 @@ All notable changes to `agentassert-abc` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] — unreleased
+## [0.6.0] — unreleased
+
+### Added
+
+- **`dependence.jaccard()`** — the model-free failure-set overlap
+  `n11 / (n11 + n10 + n01)` on a `CoFailureTable`, the statistic the paper leads
+  its co-failure result with. Raises rather than returning `0.0` when neither
+  agent failed, since an empty failure union makes the statistic undefined
+  ("no overlap" and "no failures observed" are different claims).
+
+### Fixed
+
+- **Documentation accuracy** — the 0.4.0 entry below listed Jaccard among the
+  shipped dependence estimators, but no such function existed in the package.
+  The statistic is now actually implemented and exported, with tests pinning it
+  against the published Table 1 values.
+
+## [0.5.0] — 2026-08-11
 
 ### Added
 
@@ -52,6 +69,8 @@ Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html
 - **Dependence estimators** — failure-set overlap (Jaccard), Kendall τ_a with its ceiling
   ratio, tetrachoric correlation, and a co-failure table (`dependence/estimators.py`), with
   a bootstrap-CI module.
+  <br>*Correction (0.6.0): Jaccard was named here but never shipped in 0.4.0; it landed in
+  0.6.0. The other estimators in this line were present as described.*
 - **Graph e-process certification** — anytime-valid sequential certification
   (`certification/eprocess.py`) and factor-reliability machinery
   (`certification/factor_reliability.py`).
