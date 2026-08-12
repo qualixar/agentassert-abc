@@ -22,6 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from agentassert_abc.gateway.enforcer import SessionEnforcer
+from agentassert_abc.gateway.state import assert_evaluable_on_response_surface
 from agentassert_abc.proxy import forwarder
 from agentassert_abc.proxy.hot_reload import ContractWatcher
 from agentassert_abc.proxy.routes import anthropic, gemini, openai, openrouter
@@ -62,6 +63,12 @@ def create_app(
             enforcer = SessionEnforcer.from_yaml(contract_path)
         except Exception as e:
             raise RuntimeError(f"Failed to load contract: {e}") from e
+
+        # Refuse to start on a contract this surface can never evaluate. The proxy
+        # only observes the provider response, so an invariant over anything else
+        # would score as a violation on every turn regardless of agent behaviour —
+        # silently turning a compliant agent into a failing one.
+        assert_evaluable_on_response_surface(enforcer._contract, "HTTP proxy")
 
         enforcer_store["enforcer"] = enforcer
         app.state.monitor = enforcer

@@ -20,6 +20,7 @@ returns *before* any upstream call. A DENY never reaches the provider.
 from __future__ import annotations
 
 import copy
+import time
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -30,6 +31,7 @@ from agentassert_abc.exceptions import ContractBreachError
 from agentassert_abc.gateway.content.cost import parse_streaming_usage, update_cost
 from agentassert_abc.gateway.content.pii import apply_pii_redaction, evaluate_pii_filter
 from agentassert_abc.gateway.events import PostAction, PreAction, TurnEnd
+from agentassert_abc.gateway.state import flatten_output
 from agentassert_abc.proxy.forwarder import forward_request
 
 if TYPE_CHECKING:
@@ -81,6 +83,7 @@ async def enforce_and_forward(
             canonical, enforcer, pre_event, raw_request, provider_path, upstream_overrides
         )
 
+    _t0 = time.perf_counter()
     try:
         provider_resp = await forward_request(
             provider=canonical.provider,
@@ -95,16 +98,31 @@ async def enforce_and_forward(
             content={"error": "ProviderError", "detail": str(e)},
             headers={"X-AgentAssert-Decision": "allow"},
         )
+    latency_ms = (time.perf_counter() - _t0) * 1000.0
 
     resp_data = _try_parse_json(provider_resp)
     response_text = _extract_text_content(resp_data)
+
+    # Flatten the response into `output.*` so semantic invariants can actually be
+    # evaluated. Passing only a byte count scored every such constraint as a
+    # violation, however well the agent behaved.
+    post_state: dict[str, Any] = {
+        "response.bytes": len(provider_resp.content),
+        "response.status": provider_resp.status_code,
+        "response.latency_ms": latency_ms,
+        "latency_ms": latency_ms,
+        "tool.name": tool_name,
+    }
+    post_state.update(flatten_output(resp_data))
+    if response_text:
+        post_state.setdefault("output.text", response_text)
 
     post_event = PostAction(
         session_id=canonical.session_id,
         contract_id=enforcer._contract.name,
         tool=tool_name,
         args={"status": provider_resp.status_code},
-        state={"response_bytes": len(provider_resp.content)},
+        state=post_state,
         result=resp_data,
     )
     enforcer.evaluate(post_event)
@@ -173,12 +191,20 @@ async def _forward_streaming(
             accumulated += _accumulate_chunk(chunk)
             yield chunk
 
+        stream_state: dict[str, Any] = {
+            "response.bytes": len(accumulated),
+            "response.streamed": True,
+            "tool.name": pre_event.tool,
+            "output.text": accumulated[:4096],
+            "output.raw": accumulated[:4096],
+        }
+
         post_event = PostAction(
             session_id=canonical.session_id,
             contract_id=enforcer._contract.name,
             tool=pre_event.tool,
             args=pre_event.args,
-            state={"stream_bytes": len(accumulated)},
+            state=stream_state,
             result={"content": accumulated[:4096]},
         )
         enforcer.evaluate(post_event)
