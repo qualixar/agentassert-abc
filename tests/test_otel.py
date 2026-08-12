@@ -73,7 +73,7 @@ class TestOTelExporter:
 
 
 class TestEnforcementSpans:
-    """Type C consolidation (port-delta §F, Phase F) — merged enforcement-plane
+    """Type C consolidation (the v1 to v2 migration) — merged enforcement-plane
     span types from agentassert-typec's `TypeCOTelExporter`, additive on this
     same `OTelExporter` (not a second exporter class).
     """

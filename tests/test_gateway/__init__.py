@@ -5,13 +5,13 @@
 
 """Gateway (Type C consolidation) test package.
 
-Tests migrated from `agentassert-typec` (v0.6.2, MIT) per the port-delta
-(`AgentAssert-private/analysis/typec-v1-to-v2-port-delta.md` §G). Import
+Tests migrated from `agentassert-typec` (v0.6.2, MIT) per the migration notes
+(the migration notes). Import
 paths point at `agentassert_abc.gateway`/`agentassert_abc.process` instead
 of the discontinued `agentassert_typec_core` package. Internal naming
 (`tap_*`, `mcp__hermes*`, `ds-flash-free`) has been genericized throughout.
 
-NOT migrated (out of scope for this port — see port-delta §F.3/F.4):
+NOT migrated (out of scope for this port — see the migration scope):
 - DSL parser/validator tests (`test_parser.py`, `test_validator.py`,
   parts of `test_precise_gaps.py`/`test_final_gaps.py`/`test_coverage_gaps.py`)
   — Phase D (DSL extension) is a separate, not-yet-ported phase.

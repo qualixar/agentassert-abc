@@ -8,7 +8,7 @@
 — see `tests/test_gateway/__init__.py`).
 
 IP note: `model="ds-flash-free"` fixtures genericized to
-`FREE_TIER_MODEL_ALIAS` per the port IP policy (port-delta §E.3).
+`FREE_TIER_MODEL_ALIAS` per the project's IP policy.
 """
 
 from __future__ import annotations

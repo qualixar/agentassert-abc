@@ -6,8 +6,8 @@
 """Migrated from agentassert-typec
 `packages/proxy/tests/test_persistence_integration.py`.
 
-`SessionMonitor` -> `SessionEnforcer` (port-delta §C4). Note: `ThetaScorer`
-now uses the abc v2 `(c_hard + c_soft) / 2` compliance formula (port-delta
+`SessionMonitor` -> `SessionEnforcer` (the migration notes). Note: `ThetaScorer`
+now uses the abc v2 `(c_hard + c_soft) / 2` compliance formula (the migration notes
 §C6, silent-break #1) rather than typec's `0.7*c_hard + 0.3*c_soft` — this
 test only checks round-trip preservation across a restart, so it is
 formula-agnostic and needs no value changes.

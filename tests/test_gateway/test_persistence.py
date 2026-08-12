@@ -7,7 +7,7 @@
 
 `test_serializer_drift_roundtrip` is REWRITTEN: typec's own `DriftTracker`
 shape (`_call_sequence`, `_baseline_counts`, `_total_updates`) does not
-exist in abc v2's `DriftTracker` (port-delta §C7). It now exercises abc's
+exist in abc v2's `DriftTracker` (the migration notes). It now exercises abc's
 actual shape (`history`, `_action_window`, `_reference`) via the gateway's
 `serializers.dump_drift`/`load_drift`.
 

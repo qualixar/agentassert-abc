@@ -8,7 +8,7 @@
 
 Targets `agentassert_abc.metrics.theta.ThetaScorer` (Phase B) — the class
 the gateway actually uses — NOT typec's discarded `ThetaScorer`, which
-hardcoded `0.7*c_hard + 0.3*c_soft` (port-delta §C6, silent-break #1).
+hardcoded `0.7*c_hard + 0.3*c_soft` (the migration notes).
 These tests verify the gateway-facing contract of the shared Phase B class:
 `record_compliance`, `record_drift`, `record_violation`, `record_recovery`,
 `apply_penalty`, `compute`.

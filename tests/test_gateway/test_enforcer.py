@@ -6,7 +6,7 @@
 """Migrated from agentassert-typec `tests/test_session_judge.py` +
 `tests/test_operator_enforcement.py` +
 `tests/test_evaluator_engine.py::TestSessionMonitor` (renamed
-SessionMonitor -> SessionEnforcer per port-delta §C4 — FATAL name collision
+SessionMonitor -> SessionEnforcer per the migration notes — FATAL name collision
 with abc v2's existing, unrelated `SessionMonitor`).
 """
 

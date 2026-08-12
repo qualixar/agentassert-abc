@@ -8,7 +8,7 @@
 
 Uses `load_contract_extended` (not the base `parse_contract`) — these
 templates are DSL v0.4 with `invariants.process` operators, which the base
-`ContractSpec` parser silently drops (port-delta item #17). The extended
+`ContractSpec` parser silently drops (the migration notes). The extended
 parser is the semantically correct one for enforcement-plane templates.
 """
 

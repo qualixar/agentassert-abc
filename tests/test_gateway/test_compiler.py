@@ -7,7 +7,7 @@
 `tests/test_coverage_gaps.py::TestAstCompilerABCSoftChecks`.
 
 `tap_*`/`mcp__hermes` fixtures genericized to `paid_api_*`/`mcp__paid_tool`
-per the port IP policy (port-delta §E.3).
+per the project's IP policy.
 """
 
 from __future__ import annotations

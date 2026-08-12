@@ -5,7 +5,7 @@
 
 """Migrated from agentassert-typec `packages/sdk/tests/test_wrap.py`.
 
-`SessionMonitor` -> `SessionEnforcer` (port-delta §C4). Adds async-client
+`SessionMonitor` -> `SessionEnforcer` (the migration notes). Adds async-client
 coverage: typec's original wrapper only ever called the inner client
 synchronously (silently broken for `AsyncAnthropic`/`AsyncOpenAI` despite
 the docstring claiming async support) — this port fixes that via

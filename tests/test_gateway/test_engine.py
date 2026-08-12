@@ -9,7 +9,7 @@
 
 `DriftTracker(window=N)` + `.update(tool=...)` fixtures (typec's discarded
 tracker API) are replaced with `compute_drift(c_total=..., action_dist=...)`
-calls against abc v2's `DriftTracker` (port-delta §C7) — see `_pump_drift`.
+calls against abc v2's `DriftTracker` (the migration notes) — see `_pump_drift`.
 """
 
 from __future__ import annotations
@@ -185,7 +185,7 @@ class TestPostActionCompliance:
         result = dispatch_event(event, compiled, drift, theta, ViolationLog())
         assert result.decision == TypeCDecision.ALLOW
         # No hard/soft invariants configured => c_hard=c_soft=1.0 (real evaluation,
-        # not a stub) and D(t) recorded (non-empty history — port-delta CRIT check).
+        # not a stub) and D(t) recorded (non-empty history — migration review).
         assert theta._compliance_scores == [1.0]
         assert len(drift.history) == 1
 

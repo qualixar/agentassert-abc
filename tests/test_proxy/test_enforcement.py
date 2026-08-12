@@ -5,7 +5,7 @@
 
 """Migrated from agentassert-typec `packages/proxy/tests/test_enforcement.py`.
 
-`SessionMonitor` -> `SessionEnforcer` (port-delta §C4). Fixtures reused from
+`SessionMonitor` -> `SessionEnforcer` (the migration notes). Fixtures reused from
 `tests/test_gateway/fixtures/contracts/` rather than duplicated.
 """
 
