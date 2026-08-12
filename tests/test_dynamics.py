@@ -282,3 +282,57 @@ class TestStabilityReport:
         assert report.params == params
         assert report.expected_v_decay == -0.01
         assert report.reason == "test reason"
+
+
+class TestVerdictRegressions:
+    """Regressions for defects found by the independent 0.6 audit."""
+
+    def test_missing_attractor_with_positive_gamma_is_not_divergent(self) -> None:
+        """Regression: gamma>0 with no stationary_drift reported DIVERGENT/stable=False.
+
+        Gate (i) has passed, so this is not divergence — admissibility simply
+        cannot be assessed. Reachable when a caller builds OUParameters by hand.
+        """
+        checker = LyapunovStabilityCheck()
+        seq = [0.2 + 0.01 * (i % 3) for i in range(40)]
+        report = checker.verdict(
+            seq,
+            OUParameters(alpha=0.1, gamma=0.3, sigma=0.05,
+                         log_likelihood=-1.0, stationary_drift=None),
+        )
+        assert report.verdict == StabilityVerdict.INCONCLUSIVE
+        assert report.stable is True        # gamma = 0.3 > 0
+        assert report.admissible is None    # gate (ii) not assessable
+        assert "gamma ≤ 0" not in report.reason
+
+    def test_non_finite_regression_never_leaks_nan(self) -> None:
+        """Regression: NaN slope was written into expected_v_decay.
+
+        NaN comparisons are all False, so the verdict branches fell through while
+        a NaN poisoned the report. Must refuse cleanly with a None decay instead.
+        """
+        checker = LyapunovStabilityCheck()
+        seq = [0.2] * 20 + [float("nan")] + [0.2] * 20
+        report = checker.verdict(
+            seq,
+            OUParameters(alpha=0.1, gamma=0.5, sigma=0.05,
+                         log_likelihood=-1.0, stationary_drift=0.2),
+        )
+        assert report.verdict == StabilityVerdict.INCONCLUSIVE
+        assert report.expected_v_decay is None
+        assert report.d_star == 0.2
+
+    def test_well_fitted_inadmissible_attractor_survives_a_tiny_slope(self) -> None:
+        """Regression: a practically-zero but p<0.05 slope suppressed INADMISSIBLE.
+
+        alpha=0.5, gamma=0.1 fits D* ~ 4.985 against a true 5.0 — an excellent
+        fit — while V(e) carries a ~2.6e-5 slope that clears p<0.05 only because
+        n=200. The attractor is 8x above D_crit and must still be reported.
+        """
+        drift = _ou_sample(0.5, 0.1, 0.05, n=200, seed=42)
+        params = OUFitter().fit(drift)
+        assert params is not None
+        report = LyapunovStabilityCheck().verdict(drift, params)
+        assert report.verdict == StabilityVerdict.INADMISSIBLE
+        assert report.d_star is not None
+        assert report.d_star > 4.0

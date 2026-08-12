@@ -14,6 +14,7 @@ Patent reference: arXiv:2602.22302, TECHNICAL-ATTACHMENT.md §5.3 (F3),
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -24,10 +25,15 @@ from scipy.stats import linregress
 DEFAULT_D_CRIT = 0.6
 """Critical stationary-drift threshold for the admissibility gate (paper A.4).
 
-The paper sources this as "D_crit = 0.6 per A.3", but A.3 defines the drift
-*weight* ν_c = 0.6 — a weight, not a threshold. The shared 0.6 is a coincidence
-of value, not a derivation, so this is treated here as a documented,
-configurable policy default rather than a derived constant.
+Sourced from ``models.DriftThresholds.critical`` (the v1 drift alert threshold,
+"warning=0.3, critical=0.6"): the attractor is admissible exactly when it sits
+below the level at which drift would raise a critical alert. Both sides are in
+drift-score units.
+
+NOTE for the paper: A.4 attributes this to "A.3", but A.3 defines the drift
+*weights* (ν_c = 0.6, ν_d = 0.4), not a threshold. The value is right and has a
+real source; the cross-reference is wrong and should point at the drift
+thresholds instead.
 """
 
 
@@ -216,11 +222,18 @@ class LyapunovStabilityCheck:
         Gate (i) stability: mean-reverting for every ``γ > 0`` (``α`` does not
         enter). Gate (ii) admissibility: ``D* = α/γ < d_crit``.
 
-        Empirical override: if the observed Lyapunov trajectory ``V(e_t)`` has a
-        significantly *positive* slope, the fit is contradicted by the data and
-        the verdict is ``INCONCLUSIVE`` — an honest refusal (A.4). That check
-        runs before the admissibility gate, because a ``D*`` drawn from a
-        contradicted fit is not a quantity worth ruling on.
+        Order of evaluation: stability, then admissibility, then the empirical
+        check. If the observed Lyapunov trajectory ``V(e_t)`` has a significantly
+        *positive* slope the fit is contradicted by the data and the verdict is
+        ``INCONCLUSIVE`` — an honest refusal (A.4) — but that override applies
+        only to processes that already cleared both gates. A marginally
+        significant slope is not evidence that a well-fitted ``D*`` is wrong, and
+        an inadmissible attractor stays inadmissible either way (see the inline
+        note on the admissibility gate for the measured case behind this order).
+
+        ``stable``, ``admissible``, ``d_star`` and ``d_crit`` are populated on
+        every report that can compute them, so both gates remain readable
+        regardless of which one determined ``verdict``.
 
         Args:
             drift_sequence: Observed drift scores D(t).
@@ -258,14 +271,21 @@ class LyapunovStabilityCheck:
             )
 
         # Compute stationary mean and Lyapunov variable
+        # gamma > 0 but no attractor supplied. Not reachable from OUFitter (which
+        # always sets stationary_drift when gamma > 0), but a caller can hand us a
+        # hand-built OUParameters. Gate (i) has passed, so this is NOT divergence —
+        # we simply cannot run gate (ii), so we decline to rule.
         d_star = fitted.stationary_drift
         if d_star is None:
             return StabilityReport(
-                verdict=StabilityVerdict.DIVERGENT,
+                verdict=StabilityVerdict.INCONCLUSIVE,
                 params=fitted,
                 expected_v_decay=None,
-                reason="Stationary mean undefined (gamma ≤ 0)",
-                stable=False,
+                reason=(
+                    f"Mean-reverting (gamma={fitted.gamma:.4f} > 0) but no stationary "
+                    "drift was supplied, so admissibility cannot be assessed"
+                ),
+                stable=True,
                 admissible=None,
                 d_star=None,
                 d_crit=d_crit,
@@ -282,17 +302,44 @@ class LyapunovStabilityCheck:
         slope = float(res.slope)  # type: ignore[union-attr]
         p_value = float(res.pvalue)  # type: ignore[union-attr]
 
+        # A non-finite regression (NaN/inf in the drift series, or a degenerate
+        # fit) must not leak a NaN into the report: NaN comparisons are all False,
+        # so the branches below would silently fall through to a verdict while
+        # `expected_v_decay=nan` poisons serialisation and any downstream compare.
+        if not (math.isfinite(slope) and math.isfinite(p_value)):
+            return StabilityReport(
+                verdict=StabilityVerdict.INCONCLUSIVE,
+                params=fitted,
+                expected_v_decay=None,
+                reason=(
+                    "Lyapunov regression is not finite (non-finite drift values or a "
+                    "degenerate series) — cannot assess convergence"
+                ),
+                stable=True,
+                admissible=bool(d_star < d_crit),
+                d_star=float(d_star),
+                d_crit=d_crit,
+            )
+
         # gamma > 0 here, so gate (i) has passed: the process IS mean-reverting.
         admissible = d_star < d_crit
         significant = p_value < 0.05
 
-        # Gate (ii) — admissibility. Evaluated independently of the empirical
-        # check, because A.4 makes these two SEPARATE gates: a stable process
-        # that settles on an unacceptable attractor is INADMISSIBLE, not
-        # DIVERGENT and not INCONCLUSIVE. Checked before the empirical override
-        # since it is a negative verdict (it can never certify safety) and it
-        # carries strictly more information than a bare refusal — notably for a
-        # near-zero gamma, where D* = alpha/gamma explodes.
+        # Gate (ii) — admissibility, checked BEFORE the empirical override.
+        #
+        # The tempting alternative is to let a contradicted fit suppress this gate,
+        # on the theory that D* = alpha/gamma is untrustworthy when the data
+        # disagrees with the model. Measured against the real case A.4 was written
+        # for, that is wrong: an OU series with alpha=0.5, gamma=0.1 fits D*=4.985
+        # against a true 5.0 — an excellent fit — yet its V(e) slope is 2.6e-5 with
+        # p=0.025, "significant" only because n=200. Ordering the override first
+        # would convert a correct INADMISSIBLE (attractor 8x above D_crit) into
+        # INCONCLUSIVE on the strength of a practically-zero slope.
+        #
+        # So: a marginally significant slope is not evidence the fit is wrong, and
+        # INADMISSIBLE is a negative verdict that can never over-certify. The gate
+        # runs first and the empirical override remains available for cases that
+        # clear it.
         if not admissible:
             return StabilityReport(
                 verdict=StabilityVerdict.INADMISSIBLE,
@@ -308,8 +355,9 @@ class LyapunovStabilityCheck:
                 d_crit=d_crit,
             )
 
-        # Empirical override (A.4): a significantly POSITIVE V(e) slope means the
-        # data contradicts the fitted model — refuse rather than certify.
+        # Empirical override (A.4): among processes that pass BOTH gates, a
+        # significantly positive V(e) slope means the data contradicts the fitted
+        # model — refuse rather than certify convergence.
         if significant and slope > 0:
             return StabilityReport(
                 verdict=StabilityVerdict.INCONCLUSIVE,
