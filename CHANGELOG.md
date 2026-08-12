@@ -13,6 +13,31 @@ Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html
   its co-failure result with. Raises rather than returning `0.0` when neither
   agent failed, since an empty failure union makes the statistic undefined
   ("no overlap" and "no failures observed" are different claims).
+- **Certification over arbitrary co-execution moment sets** — `moment_subsets`,
+  `empirical_subset_moments`, `moment_lp_all_success_bounds`, and
+  `moment_cp_box_floor` in `certification/lp_bound.py`. The Tier-1 floor
+  previously accepted only per-stage and pairwise success rates; it now accepts
+  any collection of co-execution moments, including triples and higher. On the
+  four-stage arm this raises the certified floor from 0.246 to 0.412. Two
+  confidence-budget allocations are supported: spend it over the moments
+  actually used (tightest), or pre-allocate over a larger family via
+  `budget_orders` so that adding a moment can never loosen the result.
+  `pairwise_lp_all_success_bounds` and `pairwise_cp_box_floor` are unchanged and
+  reproduce bit-for-bit as the order-≤2 case.
+
+### Changed
+
+- **Drift stability and admissibility are now separate verdicts.** Mean
+  reversion is judged on the reversion rate alone; where the process settles is
+  judged separately against a configurable critical drift level and reported as
+  the new `StabilityVerdict.INADMISSIBLE`. `DIVERGENT` is now reserved for
+  having no restoring force at all. `StabilityReport` gains `stable`,
+  `admissible`, `d_star`, and `d_crit`.
+  **Breaking:** sequences that previously reported `DIVERGENT` because the
+  natural drift rate exceeded the reversion rate now report `INADMISSIBLE`.
+  That comparison comes from the withdrawn v1 formulation; it is not
+  scale-invariant, because rescaling the drift score rescales one side of it
+  and not the other.
 
 ### Fixed
 
