@@ -6,7 +6,7 @@
 """SDK — `wrap(client, contract_path)` drop-in contract enforcement.
 
 Ported from `agentassert-typec-sdk` (MIT) into `agentassert_abc.sdk`
-(AGPL-3.0-or-later) per the port-delta (item #29 — 100% additive).
+(AGPL-3.0-or-later).
 
 Usage::
 

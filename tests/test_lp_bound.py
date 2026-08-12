@@ -22,6 +22,10 @@ import pytest
 from agentassert_abc.certification.lp_bound import (
     cell_patterns,
     empirical_moments,
+    empirical_subset_moments,
+    moment_cp_box_floor,
+    moment_lp_all_success_bounds,
+    moment_subsets,
     pairwise_cp_box_floor,
     pairwise_lp_all_success_bounds,
 )
@@ -256,3 +260,118 @@ def test_floor_param_validation():
         pairwise_cp_box_floor(passes, eta_conf=0.0)
     with pytest.raises(DependenceError):
         pairwise_cp_box_floor(np.array([0, 1, 1]))              # 1-D not allowed
+
+
+# ---------------------------------------------------------------------------
+# General moment sets — the tunable Tier-1 hierarchy (paper §6.2 / §7.1)
+# ---------------------------------------------------------------------------
+
+
+def _dependent_passes(m: int, n: int, seed: int = 0) -> np.ndarray:
+    """m×n pass matrix with a shared latent factor (so triples carry real info)."""
+    rng = np.random.default_rng(seed)
+    z = rng.normal(size=n)
+    return np.array(
+        [(0.8 * z + 0.6 * rng.normal(size=n) > -0.6).astype(int) for _ in range(m)]
+    )
+
+
+def test_moment_subsets_counts_match_the_paper_j() -> None:
+    # J = m + C(m,2) = 10 at m=4; adding triples gives +C(4,3) = 14.
+    assert len(moment_subsets(4, (1, 2))) == 10
+    assert len(moment_subsets(4, (1, 2, 3))) == 14
+    assert len(moment_subsets(3, (1, 2))) == 6
+    # deterministic order: by size, then lexicographic
+    assert moment_subsets(3, (1, 2))[0] == (0,)
+    assert moment_subsets(3, (1, 2))[-1] == (1, 2)
+
+
+def test_general_lp_reduces_exactly_to_the_pairwise_lp() -> None:
+    """orders=(1,2) must reproduce pairwise_lp_all_success_bounds bit-for-bit.
+
+    This is the load-bearing check on the generalisation: the new code path is a
+    strict superset of the shipped one, not a reimplementation that drifted.
+    """
+    a = _dependent_passes(4, 1200, seed=3)
+    subs = moment_subsets(4, (1, 2))
+    gen = moment_lp_all_success_bounds(4, subs, empirical_subset_moments(a, subs))
+    p, pw = empirical_moments(a)
+    pair = pairwise_lp_all_success_bounds(p, pw)
+    assert gen.lower == pytest.approx(pair.lower, abs=1e-12)
+    assert gen.upper == pytest.approx(pair.upper, abs=1e-12)
+    assert gen.j_functionals == 10
+
+
+def test_general_cp_box_floor_reduces_to_pairwise_cp_box_floor() -> None:
+    a = _dependent_passes(4, 900, seed=5)
+    assert moment_cp_box_floor(a, 0.05, (1, 2)).floor == pytest.approx(
+        pairwise_cp_box_floor(a, 0.05).floor, abs=1e-12
+    )
+
+
+def test_richer_moment_set_tightens_the_sharp_interval() -> None:
+    """Adding rows can only shrink the feasible set (monotone identification)."""
+    a = _dependent_passes(4, 1200, seed=7)
+    s10 = moment_subsets(4, (1, 2))
+    s14 = moment_subsets(4, (1, 2, 3))
+    b10 = moment_lp_all_success_bounds(4, s10, empirical_subset_moments(a, s10))
+    b14 = moment_lp_all_success_bounds(4, s14, empirical_subset_moments(a, s14))
+    assert b14.lower >= b10.lower - 1e-12
+    assert b14.upper <= b10.upper + 1e-12
+    # the empirical joint is feasible for both, so it stays sandwiched
+    observed = float(a.prod(axis=0).mean())
+    assert b14.lower - 1e-9 <= observed <= b14.upper + 1e-9
+
+
+def test_triple_moment_point_identifies_r_at_m3() -> None:
+    """Paper §6.2: at m=3 the triple moment IS the all-success cell."""
+    a = _dependent_passes(3, 800, seed=11)
+    subs = moment_subsets(3, (1, 2, 3))
+    b = moment_lp_all_success_bounds(3, subs, empirical_subset_moments(a, subs))
+    observed = float(a.prod(axis=0).mean())
+    assert b.lower == pytest.approx(observed, abs=1e-9)
+    assert b.upper == pytest.approx(observed, abs=1e-9)
+
+
+def test_preallocated_budget_makes_the_floor_monotone_by_construction() -> None:
+    """Paper §6.2: pre-allocating Bonferroni over J_max removes the width penalty.
+
+    Under used-set allocation every interval widens when a moment is added, so
+    monotonicity is empirical. Pre-allocating over the maximal family fixes the
+    interval widths, so enriching the moment set only adds constraints.
+    """
+    a = _dependent_passes(4, 900, seed=13)
+    used_10 = moment_cp_box_floor(a, 0.05, (1, 2))
+    pre_10 = moment_cp_box_floor(a, 0.05, (1, 2), budget_orders=(1, 2, 3))
+    pre_14 = moment_cp_box_floor(a, 0.05, (1, 2, 3), budget_orders=(1, 2, 3))
+    assert pre_10.j_budget == 14
+    assert pre_14.j_budget == 14
+    assert pre_14.floor >= pre_10.floor          # monotone by construction
+    assert pre_10.floor <= used_10.floor + 1e-12  # the stated width cost
+
+
+def test_budget_orders_must_cover_the_used_moment_set() -> None:
+    a = _dependent_passes(4, 400, seed=17)
+    with pytest.raises(DependenceError, match="superset"):
+        moment_cp_box_floor(a, 0.05, (1, 2, 3), budget_orders=(1, 2))
+
+
+def test_moment_lp_rejects_malformed_input() -> None:
+    with pytest.raises(DependenceError, match="differ in length"):
+        moment_lp_all_success_bounds(3, [(0,), (1,)], [0.5])
+    with pytest.raises(DependenceError, match="outside"):
+        moment_lp_all_success_bounds(2, [(0,), (5,)], [0.5, 0.5])
+    with pytest.raises(DependenceError, match=r"\[0, 1\]"):
+        moment_lp_all_success_bounds(2, [(0,), (1,)], [0.5, 1.7])
+    with pytest.raises(DependenceError, match="non-empty"):
+        moment_lp_all_success_bounds(2, [()], [0.5])
+    with pytest.raises(DependenceError, match=r"\[1, m\]"):
+        moment_subsets(3, (0,))
+
+
+def test_inconsistent_moments_degrade_to_frechet_not_crash() -> None:
+    # p_0 = p_1 = 0.5 but the pair claims co-success 0.9 > min(p_i): infeasible.
+    b = moment_lp_all_success_bounds(2, [(0,), (1,), (0, 1)], [0.5, 0.5, 0.9])
+    assert b.feasible is False
+    assert b.minimizer is None
+    assert b.lower <= b.upper

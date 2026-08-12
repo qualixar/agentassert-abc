@@ -13,6 +13,7 @@ binary failure outcomes — no model calls, fully offline-testable.
 from agentassert_abc.dependence.bootstrap import BootstrapCI, cluster_bootstrap
 from agentassert_abc.dependence.estimators import (
     CoFailureTable,
+    jaccard,
     kendall_tau_a,
     one_factor_loadings,
     phi_coefficient,
@@ -24,6 +25,7 @@ __all__ = [
     "BootstrapCI",
     "CoFailureTable",
     "cluster_bootstrap",
+    "jaccard",
     "kendall_tau_a",
     "one_factor_loadings",
     "phi_coefficient",

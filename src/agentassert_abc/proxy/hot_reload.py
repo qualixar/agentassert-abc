@@ -7,7 +7,7 @@
 
 Ported from agentassert-typec's `hot_reload.py`. Only the tracked type
 changes: it watches/swaps a :class:`~agentassert_abc.gateway.SessionEnforcer`
-(the port-delta §C4 rename of typec's `SessionMonitor`), not the abc v2
+(the rename of typec's `SessionMonitor`), not the abc v2
 measurement-plane `SessionMonitor`.
 """
 

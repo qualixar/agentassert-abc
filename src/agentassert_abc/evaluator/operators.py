@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import re
+import threading
 from typing import Any
 
 from agentassert_abc.models import ConstraintCheck  # noqa: TCH001
@@ -30,6 +31,24 @@ from agentassert_abc.models import ConstraintCheck  # noqa: TCH001
 # Length caps alone (10K chars, 1K pattern) cannot stop exponential backtracking.
 # concurrent.futures gives us a portable OS-independent timeout.
 _RE_TIMEOUT_S: float = 1.0
+
+# Shared worker for the ReDoS timeout guard. Built lazily and never shut down —
+# a per-call ThreadPoolExecutor cost ~6x the regex evaluation itself under load.
+# Several workers so one wedged catastrophic pattern cannot starve other checks.
+_REGEX_POOL: concurrent.futures.ThreadPoolExecutor | None = None
+_REGEX_POOL_LOCK = threading.Lock()
+
+
+def _regex_pool() -> concurrent.futures.ThreadPoolExecutor:
+    """Return the shared regex-timeout worker pool, creating it on first use."""
+    global _REGEX_POOL  # noqa: PLW0603
+    if _REGEX_POOL is None:
+        with _REGEX_POOL_LOCK:
+            if _REGEX_POOL is None:
+                _REGEX_POOL = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=4, thread_name_prefix="agentassert-regex"
+                )
+    return _REGEX_POOL
 
 
 def evaluate_check(check: ConstraintCheck, state: dict[str, Any]) -> bool:
@@ -92,12 +111,15 @@ def evaluate_check(check: ConstraintCheck, state: dict[str, Any]) -> bool:
                 return False
             # Ledger 4a: wall-clock timeout prevents exponential-backtracking ReDoS.
             # Length caps alone are insufficient for hand-crafted catastrophic patterns.
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
-                _fut = _pool.submit(re.search, check.matches, text)
-                try:
-                    return bool(_fut.result(timeout=_RE_TIMEOUT_S))
-                except concurrent.futures.TimeoutError:
-                    return False
+            # The pool is a module-level singleton: creating and tearing one down
+            # per check cost ~6x the evaluation itself under load (audit H-03).
+            _fut = _regex_pool().submit(re.search, check.matches, text)
+            try:
+                return bool(_fut.result(timeout=_RE_TIMEOUT_S))
+            except concurrent.futures.TimeoutError:
+                # The worker may still be spinning on a catastrophic pattern; the
+                # pool absorbs it rather than blocking this caller.
+                return False
         except (re.error, TypeError):
             return False
     if check.between is not None:

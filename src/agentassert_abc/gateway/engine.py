@@ -5,10 +5,10 @@
 
 """Event dispatch — routes a TypeCEvent to the right evaluator chain.
 
-Ported from agentassert-typec's `evaluator/engine.py` (port-delta §A.2,
+Ported from agentassert-typec's `evaluator/engine.py` (,
 item #20). `_eval_pre_action` and the PreAction gate order are unchanged.
 
-`_eval_post_action` is REWRITTEN (port-delta §C6/§C7, silent-breaks #1/#3):
+`_eval_post_action` is REWRITTEN:
 typec's original called `drift.update(tool, state)` (AttributeError against
 abc v2's DriftTracker) and `theta.record_action(tool)` (a documented
 no-op — typec NEVER actually fed compliance/drift into ThetaScorer in

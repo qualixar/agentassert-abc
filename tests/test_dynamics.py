@@ -133,8 +133,13 @@ class TestLyapunovStabilityCheck:
         assert report.expected_v_decay is not None
         assert report.expected_v_decay < 0  # V(e) is decreasing
 
-    def test_divergent_ou_gamma_le_alpha(self) -> None:
-        """When gamma <= alpha, verdict should be DIVERGENT."""
+    def test_gamma_below_alpha_is_inadmissible_not_divergent(self) -> None:
+        """Paper A.4: gamma < alpha is NOT divergence — it is an inadmissible attractor.
+
+        The v1 test (gamma <= alpha -> DIVERGENT) is disavowed by A.4 as not
+        scale-invariant. With gamma = 0.1 > 0 the process IS mean-reverting; what
+        is wrong is where it settles: D* = alpha/gamma = 5.0, far above D_crit.
+        """
         alpha, gamma, sigma = 0.5, 0.1, 0.05  # gamma < alpha
         drift = _ou_sample(alpha, gamma, sigma, n=200, seed=42)
         fitter = OUFitter()
@@ -143,10 +148,46 @@ class TestLyapunovStabilityCheck:
 
         checker = LyapunovStabilityCheck()
         report = checker.verdict(drift, params)
-        assert report.verdict == StabilityVerdict.DIVERGENT
-        assert report.params is not None
-        assert "gamma" in report.reason.lower()
-        assert "alpha" in report.reason.lower()
+        assert report.verdict == StabilityVerdict.INADMISSIBLE
+        assert report.stable is True       # gate (i) passed: gamma > 0
+        assert report.admissible is False  # gate (ii) failed: D* >= D_crit
+        assert report.d_star is not None
+        assert report.d_star >= report.d_crit
+
+    def test_admissibility_threshold_is_configurable(self) -> None:
+        """The same process flips verdict when D_crit is raised above its D*."""
+        alpha, gamma, sigma = 0.5, 0.1, 0.05  # D* ~ 5.0
+        drift = _ou_sample(alpha, gamma, sigma, n=200, seed=42)
+        params = OUFitter().fit(drift)
+        assert params is not None
+
+        checker = LyapunovStabilityCheck()
+        strict = checker.verdict(drift, params, d_crit=0.6)
+        lax = checker.verdict(drift, params, d_crit=100.0)
+        assert strict.verdict == StabilityVerdict.INADMISSIBLE
+        assert lax.admissible is True
+        assert lax.verdict != StabilityVerdict.INADMISSIBLE
+
+    def test_stability_gate_ignores_alpha_entirely(self) -> None:
+        """A.4 gate (i): mean-reversion depends on gamma alone, never on alpha.
+
+        Rescaling drift (D -> cD) sends alpha -> c*alpha and leaves gamma fixed,
+        so any alpha-vs-gamma comparison flips on an unchanged process. Two fits
+        differing ONLY in alpha must agree on the stability gate.
+        """
+        checker = LyapunovStabilityCheck()
+        drift = _ou_sample(0.1, 0.5, 0.05, n=200, seed=7)
+
+        small_alpha = OUParameters(
+            alpha=0.01, gamma=0.5, sigma=0.05,
+            log_likelihood=-10.0, stationary_drift=0.02,
+        )
+        big_alpha = OUParameters(
+            alpha=10.0, gamma=0.5, sigma=0.05,
+            log_likelihood=-10.0, stationary_drift=20.0,
+        )
+        assert checker.verdict(drift, small_alpha).stable is True
+        assert checker.verdict(drift, big_alpha).stable is True  # would be "divergent" under v1
 
     def test_too_short_sequence(self) -> None:
         """Sequence too short should yield INCONCLUSIVE."""
@@ -161,8 +202,14 @@ class TestLyapunovStabilityCheck:
         assert report.params is None
         assert "insufficient" in report.reason.lower()
 
-    def test_no_mean_reversion_gamma_zero(self) -> None:
-        """gamma = 0 should yield DIVERGENT (no restoring force)."""
+    def test_random_walk_is_refused_by_the_empirical_gate(self) -> None:
+        """A random walk (gamma ~ 0, alpha ~ 0) must not be certified stable.
+
+        Both gates nominally pass — gamma > 0, and D* = alpha/gamma = 0 is well
+        below D_crit — but the observed V(e) trajectory grows, contradicting the
+        fit. A.4's honest refusal (INCONCLUSIVE) is the correct outcome; the old
+        code reached DIVERGENT here only via the disavowed alpha comparison.
+        """
         alpha, gamma, sigma = 0.2, 0.0, 0.05
         drift = _ou_sample(alpha, gamma, sigma, n=200, seed=42)
         fitter = OUFitter()
@@ -172,7 +219,34 @@ class TestLyapunovStabilityCheck:
 
         checker = LyapunovStabilityCheck()
         report = checker.verdict(drift, params)
+        assert report.verdict == StabilityVerdict.INCONCLUSIVE
+        assert report.stable is True
+        assert report.expected_v_decay is not None
+        assert report.expected_v_decay > 0  # V(e) growing -> fit contradicted
+
+    def test_exploding_attractor_is_inadmissible(self) -> None:
+        """Tiny gamma with real alpha sends D* = alpha/gamma far outside [0,1]."""
+        checker = LyapunovStabilityCheck()
+        drift = _ou_sample(0.1, 0.5, 0.05, n=200, seed=11)
+        exploding = OUParameters(
+            alpha=0.2, gamma=0.001, sigma=0.05,
+            log_likelihood=-10.0, stationary_drift=200.0,
+        )
+        report = checker.verdict(drift, exploding)
+        assert report.verdict == StabilityVerdict.INADMISSIBLE
+        assert report.d_star == 200.0
+
+    def test_true_divergence_requires_non_positive_gamma(self) -> None:
+        """DIVERGENT is now reserved for gamma <= 0: no restoring force at all."""
+        checker = LyapunovStabilityCheck()
+        drift = _ou_sample(0.2, 0.0, 0.05, n=200, seed=42)
+        no_reversion = OUParameters(
+            alpha=0.2, gamma=0.0, sigma=0.05,
+            log_likelihood=-10.0, stationary_drift=None,
+        )
+        report = checker.verdict(drift, no_reversion)
         assert report.verdict == StabilityVerdict.DIVERGENT
+        assert report.stable is False
 
     def test_high_noise_still_convergent_if_gamma_gt_alpha(self) -> None:
         """Even with high sigma, if gamma > alpha we should still get CONVERGENT."""
@@ -208,3 +282,57 @@ class TestStabilityReport:
         assert report.params == params
         assert report.expected_v_decay == -0.01
         assert report.reason == "test reason"
+
+
+class TestVerdictRegressions:
+    """Regressions for defects found by the independent 0.6 audit."""
+
+    def test_missing_attractor_with_positive_gamma_is_not_divergent(self) -> None:
+        """Regression: gamma>0 with no stationary_drift reported DIVERGENT/stable=False.
+
+        Gate (i) has passed, so this is not divergence — admissibility simply
+        cannot be assessed. Reachable when a caller builds OUParameters by hand.
+        """
+        checker = LyapunovStabilityCheck()
+        seq = [0.2 + 0.01 * (i % 3) for i in range(40)]
+        report = checker.verdict(
+            seq,
+            OUParameters(alpha=0.1, gamma=0.3, sigma=0.05,
+                         log_likelihood=-1.0, stationary_drift=None),
+        )
+        assert report.verdict == StabilityVerdict.INCONCLUSIVE
+        assert report.stable is True        # gamma = 0.3 > 0
+        assert report.admissible is None    # gate (ii) not assessable
+        assert "gamma ≤ 0" not in report.reason
+
+    def test_non_finite_regression_never_leaks_nan(self) -> None:
+        """Regression: NaN slope was written into expected_v_decay.
+
+        NaN comparisons are all False, so the verdict branches fell through while
+        a NaN poisoned the report. Must refuse cleanly with a None decay instead.
+        """
+        checker = LyapunovStabilityCheck()
+        seq = [0.2] * 20 + [float("nan")] + [0.2] * 20
+        report = checker.verdict(
+            seq,
+            OUParameters(alpha=0.1, gamma=0.5, sigma=0.05,
+                         log_likelihood=-1.0, stationary_drift=0.2),
+        )
+        assert report.verdict == StabilityVerdict.INCONCLUSIVE
+        assert report.expected_v_decay is None
+        assert report.d_star == 0.2
+
+    def test_well_fitted_inadmissible_attractor_survives_a_tiny_slope(self) -> None:
+        """Regression: a practically-zero but p<0.05 slope suppressed INADMISSIBLE.
+
+        alpha=0.5, gamma=0.1 fits D* ~ 4.985 against a true 5.0 — an excellent
+        fit — while V(e) carries a ~2.6e-5 slope that clears p<0.05 only because
+        n=200. The attractor is 8x above D_crit and must still be reported.
+        """
+        drift = _ou_sample(0.5, 0.1, 0.05, n=200, seed=42)
+        params = OUFitter().fit(drift)
+        assert params is not None
+        report = LyapunovStabilityCheck().verdict(drift, params)
+        assert report.verdict == StabilityVerdict.INADMISSIBLE
+        assert report.d_star is not None
+        assert report.d_star > 4.0

@@ -6,14 +6,14 @@
 """Gateway — the real-time enforcement plane (Type C consolidation).
 
 Ported from `agentassert-typec` (MIT) into `agentassert-abc` (AGPL-3.0-or-later)
-per the port-delta (`AgentAssert-private/analysis/typec-v1-to-v2-port-delta.md`).
+.
 
 Where `agentassert_abc.monitor` MEASURES agent behavior (state-diff inputs,
 formal proofs), this package ENFORCES it at the hot path — intercepting tool
 calls before/after execution and returning ALLOW/DENY/REDACT/MODIFY/WARN
 decisions in real time.
 
-Naming note (port-delta §C4, FATAL): typec's `SessionMonitor` (event-driven
+Naming note: typec's `SessionMonitor` (event-driven
 enforcer) collided with abc v2's existing `SessionMonitor` (step-driven
 measurement monitor). The enforcer is exported here as `SessionEnforcer`.
 `TypeCDecision`/`DecisionResult`/`ContractSpecExtended`/`ProcessInvariants`

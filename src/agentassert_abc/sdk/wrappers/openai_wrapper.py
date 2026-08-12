@@ -6,7 +6,7 @@
 """WrappedOpenAI — enforced drop-in for `openai.OpenAI`/`AsyncOpenAI`.
 
 Ported from agentassert-typec-sdk's `openai_wrapper.py`. `SessionMonitor` ->
-`SessionEnforcer` (port-delta §C4). Sync/async dispatch added (see
+`SessionEnforcer`. Sync/async dispatch added (see
 `anthropic_wrapper.py` module docstring for the rationale) via
 `inspect.iscoroutinefunction()` introspection of the wrapped
 `chat.completions.create`.

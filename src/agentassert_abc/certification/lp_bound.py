@@ -48,6 +48,7 @@ Everything here is pure offline statistics; nothing calls a model or the network
 from __future__ import annotations
 
 import dataclasses
+import itertools
 
 import numpy as np
 from scipy.optimize import linprog
@@ -56,7 +57,11 @@ from agentassert_abc.certification.factor_reliability import (
     _as_pass_matrix,
     frechet_all_success_bounds,
 )
-from agentassert_abc.certification.observed_floor import bonferroni_cp_cells
+from agentassert_abc.certification.observed_floor import (
+    bonferroni_cp_cells,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
+)
 from agentassert_abc.exceptions import DependenceError
 
 # 2^m joint cells; caps the LP at 4096 variables. Composed pipelines in the
@@ -184,6 +189,325 @@ def pairwise_lp_all_success_bounds(marginals: object, pairwise: object) -> Pairw
     minimizer = tuple(float(x) for x in res_lo.x)
     return PairwiseLPBounds(
         lower=lower, upper=upper, minimizer=minimizer, feasible=True, m=m
+    )
+
+
+# ---------------------------------------------------------------------------
+# General moment sets: the tunable Tier-1 hierarchy (paper Sec 6.2 / 7.1)
+# ---------------------------------------------------------------------------
+#
+# Marginals + pairwise is the order-<=2 member of a hierarchy. Supplying
+# higher-order co-execution moments (triples, quadruples, ...) adds equality
+# rows to the SAME joint-cell LP, shrinking the feasible set and weakly raising
+# the floor. The moment set is identified by the subsets S of stages for which
+# Pr(AND_{i in S} S_i = 1) is supplied; J = |moment set| is the paper's box
+# functional count.
+#
+# HONEST CAVEAT (finite samples): richer moment sets tighten the *identification*
+# set but widen every Clopper-Pearson interval, because the Bonferroni family
+# grows from J to J'. The net effect on the CERTIFIED floor is therefore an
+# empirical question, not a theorem -- extrapolation can lose to the penalty at
+# small n. Only the point-moment bounds are monotone by construction.
+
+
+def moment_subsets(m: int, orders: object = (1, 2)) -> tuple[tuple[int, ...], ...]:
+    """Every subset of ``{0..m-1}`` whose size appears in ``orders``.
+
+    ``orders=(1, 2)`` reproduces the classic marginals + pairwise moment set
+    (``J = m + C(m,2)``); adding ``3`` appends the triple co-success moments.
+
+    Args:
+        m: number of stages.
+        orders: iterable of subset sizes to include, e.g. ``(1, 2, 3)``.
+
+    Returns:
+        Subsets as sorted index tuples, ordered by size then lexicographically,
+        so the ordering is deterministic across calls (the LP row order and the
+        Bonferroni family both depend on it).
+    """
+    if m < 1:
+        raise DependenceError("m must be >= 1")
+    if m > _LP_MAX_M:
+        raise DependenceError(f"LP bound supports m <= {_LP_MAX_M} branches (got {m})")
+    try:
+        wanted = sorted({int(o) for o in orders})  # type: ignore[union-attr]
+    except TypeError as exc:
+        raise DependenceError("orders must be an iterable of subset sizes") from exc
+    if not wanted:
+        raise DependenceError("orders must name at least one subset size")
+    if any(o < 1 or o > m for o in wanted):
+        raise DependenceError(f"orders must lie in [1, m]; got {wanted} for m={m}")
+    return tuple(
+        subset
+        for order in wanted
+        for subset in itertools.combinations(range(m), order)
+    )
+
+
+def _subset_rows(patterns: np.ndarray, subsets: object) -> np.ndarray:
+    """Indicator row per subset: 1 on cells where every stage in the subset succeeds."""
+    rows = []
+    for subset in subsets:  # type: ignore[union-attr]
+        col = np.ones(patterns.shape[0])
+        for i in subset:
+            col = col * patterns[:, i]
+        rows.append(col)
+    return np.array(rows)
+
+
+def empirical_subset_moments(
+    passes: object, subsets: object
+) -> tuple[float, ...]:
+    """``Pr(all stages in S succeed)`` for each subset, read off one joint.
+
+    Every moment comes from the same empirical joint, so the values are mutually
+    consistent by construction and the point-moment LP is always feasible (the
+    empirical joint is itself a feasible point). No smoothing — see
+    :func:`empirical_moments`.
+    """
+    a = _as_pass_matrix(passes)
+    out: list[float] = []
+    for subset in subsets:  # type: ignore[union-attr]
+        col = np.ones(a.shape[1])
+        for i in subset:
+            col = col * a[i]
+        out.append(float(col.mean()))
+    return tuple(out)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MomentLPBounds:
+    """Sharp all-success bounds over an arbitrary supplied moment set.
+
+    Attributes:
+        lower: sharp minimum all-success probability over the moment set.
+        upper: sharp maximum.
+        minimizer: the adversarial joint attaining ``lower`` (cell order matches
+            :func:`cell_patterns`), or ``None`` when infeasible.
+        feasible: ``False`` if the supplied moments admit no joint law.
+        m: number of stages.
+        subsets: the moment set used, in LP row order.
+        j_functionals: ``J = len(subsets)``.
+    """
+
+    lower: float
+    upper: float
+    minimizer: tuple[float, ...] | None
+    feasible: bool
+    m: int
+    subsets: tuple[tuple[int, ...], ...]
+    j_functionals: int
+
+
+def moment_lp_all_success_bounds(
+    m: int, subsets: object, values: object
+) -> MomentLPBounds:
+    """Sharp all-success bounds from an **arbitrary** moment set (general Thm B.8).
+
+    Generalises :func:`pairwise_lp_all_success_bounds` from the fixed
+    {marginals, pairwise} set to any collection of co-execution moments. Each
+    subset ``S`` contributes one equality row
+    ``sum_{c : c_i = 1 for all i in S} x_c = value_S``.
+
+    Because extra rows only *remove* feasible joints, a superset moment family
+    weakly raises ``lower`` and weakly lowers ``upper`` — the hierarchy is
+    monotone at the point-moment level.
+
+    Args:
+        m: number of stages.
+        subsets: moment subsets, e.g. from :func:`moment_subsets`.
+        values: matching ``Pr(AND_{i in S} S_i = 1)`` per subset.
+
+    Returns:
+        A :class:`MomentLPBounds`; on infeasible input it degrades to the
+        assumption-free Fréchet sandwich rather than raising.
+    """
+    subs = tuple(tuple(int(i) for i in s) for s in subsets)  # type: ignore[union-attr]
+    vals = np.asarray(list(values), dtype=float)  # type: ignore[call-overload]
+    if len(subs) != vals.size:
+        raise DependenceError(
+            f"subsets and values differ in length: {len(subs)} vs {vals.size}"
+        )
+    if not subs:
+        raise DependenceError("at least one moment subset is required")
+    for s in subs:
+        if not s:
+            raise DependenceError("moment subsets must be non-empty")
+        if any(i < 0 or i >= m for i in s):
+            raise DependenceError(f"subset {s} has an index outside [0, {m - 1}]")
+    if np.any(vals < 0.0) or np.any(vals > 1.0):
+        raise DependenceError("moment values must lie in [0, 1]")
+
+    patterns = cell_patterns(m)
+    n_cells = patterns.shape[0]
+    # Marginals, where supplied, pin the Fréchet fallback; otherwise stay vacuous.
+    singles = {s[0]: v for s, v in zip(subs, vals, strict=True) if len(s) == 1}
+    if len(singles) == m:
+        fl_lo, fl_hi = frechet_all_success_bounds(
+            np.array([singles[i] for i in range(m)])
+        )
+    else:
+        fl_lo, fl_hi = 0.0, 1.0
+
+    a_eq = np.vstack([np.ones(n_cells), _subset_rows(patterns, subs)])
+    b_eq = np.concatenate([[1.0], vals])
+    c = np.zeros(n_cells)
+    c[n_cells - 1] = 1.0
+    res_lo = linprog(c, A_eq=a_eq, b_eq=b_eq, bounds=(0.0, 1.0), method="highs")
+    res_hi = linprog(-c, A_eq=a_eq, b_eq=b_eq, bounds=(0.0, 1.0), method="highs")
+
+    if not (res_lo.success and res_hi.success):
+        return MomentLPBounds(
+            lower=fl_lo, upper=fl_hi, minimizer=None, feasible=False, m=m,
+            subsets=subs, j_functionals=len(subs),
+        )
+    lower = float(min(max(res_lo.fun, 0.0), fl_hi))
+    upper = float(min(max(-res_hi.fun, lower), 1.0))
+    return MomentLPBounds(
+        lower=lower, upper=upper,
+        minimizer=tuple(float(x) for x in res_lo.x),
+        feasible=True, m=m, subsets=subs, j_functionals=len(subs),
+    )
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MomentBoxFloor:
+    """Certified finite-sample floor over a general Bonferroni-CP moment box.
+
+    Same guarantee as :class:`PairwiseRobustFloor` — an exact ``(1 − η_conf)``
+    LCB assuming only i.i.d. missions, no copula — but over an arbitrary moment
+    family. ``J`` functionals give ``2J`` one-sided tails, each at
+    ``η_conf / (2J)``, so the box holds jointly with probability ``≥ 1 − η_conf``.
+    """
+
+    floor: float
+    upper: float
+    observed: float
+    eta_conf: float
+    m: int
+    n: int
+    orders: tuple[int, ...]
+    j_functionals: int
+    j_budget: int
+    feasible: bool
+    basis: str
+    assumptions: tuple[str, ...]
+
+
+def moment_cp_box_floor(
+    passes: object,
+    eta_conf: float = 0.05,
+    orders: object = (1, 2),
+    budget_orders: object = None,
+) -> MomentBoxFloor:
+    """Certified copula-agnostic floor over an arbitrary moment set + CP box.
+
+    The tunable Tier-1 certificate: ``orders=(1,2)`` is exactly
+    :func:`pairwise_cp_box_floor`; ``orders=(1,2,3)`` adds triple co-success
+    moments, the extrapolation the paper's moment hierarchy describes.
+
+    Soundness: on the event that all Clopper–Pearson intervals cover
+    (probability ``≥ 1 − η_conf`` by the union bound over the one-sided tails),
+    the true joint law is LP-feasible, so the LP minimum is ``≤`` the true
+    all-success probability.
+
+    **Two Bonferroni allocations** (both in the paper):
+
+    * *used-set* (default, ``budget_orders=None``) — spend ``η_conf`` over the
+      ``J`` moments actually supplied, each tail at ``η_conf/(2J)``. Tightest
+      for a given moment set, but adding a moment widens every interval, so
+      monotonicity in the moment set is empirical, not guaranteed.
+    * *pre-allocated* (``budget_orders`` given) — spend the budget over the
+      larger family ``J_max`` induced by ``budget_orders`` while constraining
+      only the ``orders`` moments. Every interval then has a width that does not
+      depend on how many moments are used, so enriching the moment set can only
+      add constraints and the certified floor is monotone **by construction**,
+      at a small stated width cost.
+
+    Args:
+        passes: ``m × n`` binary pass matrix (rows = stages).
+        eta_conf: family-wise one-sided miscoverage (default 0.05).
+        orders: subset sizes forming the moment set actually constrained.
+        budget_orders: if given, subset sizes defining the Bonferroni budget
+            family ``J_max``. Must be a superset family of ``orders``.
+
+    Returns:
+        A :class:`MomentBoxFloor`.
+    """
+    if not 0.0 < eta_conf < 1.0:
+        raise DependenceError("eta_conf must be in (0, 1)")
+    a = _as_pass_matrix(passes)
+    m, n = a.shape
+    subs = moment_subsets(m, orders)
+    j = len(subs)
+    if budget_orders is None:
+        j_budget = j
+    else:
+        budget_subs = set(moment_subsets(m, budget_orders))
+        if not set(subs) <= budget_subs:
+            raise DependenceError(
+                "budget_orders must induce a superset of the constrained moment "
+                f"family (got {len(budget_subs)} budget moments vs {j} used)"
+            )
+        j_budget = len(budget_subs)
+    # Two-sided box: 2J one-sided tails each at η/(2J) ⇒ family-wise η.
+    e = eta_conf / (2.0 * j_budget)
+
+    lo = np.empty(j)
+    hi = np.empty(j)
+    for idx, subset in enumerate(subs):
+        col = np.ones(n)
+        for i in subset:
+            col = col * a[i]
+        k = int(col.sum())
+        lo[idx] = clopper_pearson_lower(k, n, e)
+        hi[idx] = clopper_pearson_upper(k, n, e)
+
+    patterns = cell_patterns(m)
+    rows = _subset_rows(patterns, subs)
+    n_cells = patterns.shape[0]
+    c = np.zeros(n_cells)
+    c[n_cells - 1] = 1.0
+    a_ub = np.vstack([rows, -rows])
+    b_ub = np.concatenate([hi, -lo])
+    a_eq = np.ones((1, n_cells))
+    b_eq = np.array([1.0])
+
+    def _solve(maximize: bool) -> float | None:
+        res = linprog(
+            -c if maximize else c, A_ub=a_ub, b_ub=b_ub, A_eq=a_eq, b_eq=b_eq,
+            bounds=(0.0, 1.0), method="highs",
+        )
+        if not res.success:
+            return None
+        return -float(res.fun) if maximize else float(res.fun)
+
+    lp_lo = _solve(maximize=False)
+    lp_hi = _solve(maximize=True)
+    feasible = lp_lo is not None
+    floor = 0.0 if lp_lo is None else float(np.clip(lp_lo - _LP_TOL, 0.0, 1.0))
+    upper = 1.0 if lp_hi is None else float(np.clip(lp_hi, floor, 1.0))
+    return MomentBoxFloor(
+        floor=floor,
+        upper=upper,
+        observed=float(a.prod(axis=0).mean()),
+        eta_conf=eta_conf,
+        m=m,
+        n=n,
+        orders=tuple(sorted({int(o) for o in orders})),  # type: ignore[union-attr]
+        j_functionals=j,
+        j_budget=j_budget,
+        feasible=feasible,
+        basis=(
+            "sharp LP over the Bonferroni-CP moment box on subsets of order "
+            f"{tuple(sorted({int(o) for o in orders}))}"  # type: ignore[union-attr]
+            + (f", Bonferroni budget pre-allocated over J_max={j_budget}"
+               if j_budget != j else "")
+        ),
+        assumptions=(
+            "missions i.i.d. from the certified mission distribution",
+            "NO copula / factor / tail-dependence assumption",
+        ),
     )
 
 

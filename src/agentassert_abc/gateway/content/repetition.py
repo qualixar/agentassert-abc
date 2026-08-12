@@ -5,8 +5,8 @@
 
 """Content operator: repetition_guard — detect repeated tool-call sequences.
 
-Ported from agentassert-typec's `evaluator/content_eval.py` (port-delta
-§A.2, item #19). Behavior unchanged from typec; only import paths moved.
+Ported from the Type C content evaluator; behaviour unchanged, import paths
+moved.
 """
 
 from __future__ import annotations

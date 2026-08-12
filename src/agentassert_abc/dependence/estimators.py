@@ -8,6 +8,7 @@
 Given paired binary *failure* outcomes for two agents (1 = contract failed),
 these estimate how strongly their failures co-occur:
 
+* :func:`jaccard`        — model-free failure-set overlap n11/(n11+n10+n01).
 * :func:`kendall_tau_a`  — binary Kendall tau_a = 2(p11*p00 - p10*p01).
 * :func:`phi_coefficient` — the phi / point Pearson correlation (= tau_b binary).
 * :func:`tetrachoric`     — latent bivariate-normal correlation behind the 2x2.
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CoFailureTable",
+    "jaccard",
     "kendall_tau_a",
     "one_factor_loadings",
     "phi_coefficient",
@@ -110,6 +112,35 @@ class CoFailureTable:
     def _proportions(self) -> tuple[float, float, float, float]:
         n = self.n
         return self.n11 / n, self.n10 / n, self.n01 / n, self.n00 / n
+
+
+def jaccard(table: CoFailureTable) -> float:
+    """Failure-set overlap (Jaccard) = n11 / (n11 + n10 + n01)  (paper v2 Sec 3).
+
+    The fraction of the two agents' failures that fall on the *same* missions.
+    Model-free in the strong sense: unlike :func:`tetrachoric` it assumes no
+    latent distribution, and unlike :func:`kendall_tau_a` it is not bounded by
+    the marginals — which is why the paper leads Finding 2 with it. When one
+    agent fails rarely, tau_a is squeezed toward its marginal ceiling and
+    *looks* like decorrelation; Jaccard is not, so it still reports the overlap.
+
+    The ``n00`` cell (both passed) is deliberately excluded: the denominator is
+    the *union of the two failure sets*, so missions neither agent failed cannot
+    dilute the statistic. That is what keeps Jaccard informative when failures
+    are rare.
+
+    Raises:
+        DependenceError: if neither agent failed on any mission, where the
+            failure union is empty and the statistic is undefined. Returning
+            0.0 would assert "the failures do not overlap", which is a
+            different claim from "no failures were observed".
+    """
+    union = table.n11 + table.n10 + table.n01
+    if union == 0:
+        raise DependenceError(
+            "Jaccard is undefined when neither agent failed (empty failure union)"
+        )
+    return table.n11 / union
 
 
 def kendall_tau_a(table: CoFailureTable) -> float:

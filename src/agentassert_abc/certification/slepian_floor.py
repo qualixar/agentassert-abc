@@ -169,13 +169,24 @@ def slepian_model_floor(passes: object, eta_conf: float = 0.05) -> SlepianModelF
         eta_conf: one-sided family-wise miscoverage (default 0.05).
 
     Returns:
-        A :class:`SlepianModelFloor`. Valid (1 − η_conf) LCB on the Gaussian
+        A :class:`SlepianModelFloor`. Valid **(1 − 2·η_conf)** LCB on the Gaussian
         one-factor / copula model functional — **not** on true reliability.
+
+    Confidence-level note. This consumes ``2K`` one-sided tails (two-sided
+    marginal *and* co-failure boxes) from a Bonferroni family sized ``K``, so the
+    family-wise miscoverage is ``2·η_conf``: at the default this is a 90% bound,
+    not 95%. Tier 1's :func:`~agentassert_abc.certification.lp_bound.pairwise_cp_box_floor`
+    compensates by halving (it passes ``η_conf/2``); Tier 2 deliberately does not,
+    because it is a **diagnostic** that is never selected as the certificate
+    (``is_model_bound=True``, ``is_guarantee=False``) and because the published
+    Tier-2 figures were computed at this level. Do not "fix" this by halving
+    ``eta_conf`` without also restating those numbers.
     """
     if not 0.0 < eta_conf < 1.0:
         raise DependenceError("eta_conf must be in (0, 1)")
     a = _as_pass_matrix(passes)
     m, n = a.shape
+    # NOTE: eta_conf (not eta_conf/2) — see the confidence-level note above.
     box = bonferroni_cp_cells(a, eta_conf)
     p_lo = np.array(box.p_lo)
     p_hi = np.array(box.p_hi)

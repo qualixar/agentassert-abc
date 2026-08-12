@@ -5,7 +5,7 @@
 
 """PII regex patterns — compiled once at module import time, never per-call.
 
-Ported unchanged from agentassert-typec (port-delta §A.2, item #19).
+Ported unchanged from agentassert-typec.
 """
 
 from __future__ import annotations

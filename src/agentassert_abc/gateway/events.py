@@ -6,7 +6,7 @@
 """Gateway event types (Type C consolidation).
 
 Ported from agentassert-typec's `models/events.py` + `models/session.py`
-(port-delta §A.2, item #20). These are the hot-path event dataclasses the
+. These are the hot-path event dataclasses the
 enforcement plane (:mod:`agentassert_abc.gateway`) dispatches on — distinct
 from the measurement plane's plain ``state: dict`` input to
 :class:`agentassert_abc.monitor.session.SessionMonitor`.
@@ -49,7 +49,7 @@ class HistoryDigest:
 class DriftReport:
     """Session-end drift summary.
 
-    Port note (port-delta §C7 / #10): typec's original ``DriftTracker``
+    Port note: typec's original ``DriftTracker``
     exposed ``current_jsd()`` (pure Jensen-Shannon divergence over a tool
     window) and per-tool frequency via ``report()``. abc v2's
     ``agentassert_abc.metrics.drift.DriftTracker`` (the keeper — typec's own

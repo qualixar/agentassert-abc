@@ -6,7 +6,7 @@
 """Stdin/stdout hook for Claude Code's PreToolUse/PostToolUse events.
 
 Ported from agentassert-typec-claude-code's `hook.py`. `SessionMonitor` ->
-`SessionEnforcer` (port-delta §C4). Fail-open by design: any error reading
+`SessionEnforcer`. Fail-open by design: any error reading
 stdin, loading the contract, or evaluating the event allows the tool call
 through rather than blocking the user's session — matches typec's original
 behavior, appropriate for a hook that must never hang or crash Claude Code.
@@ -19,8 +19,14 @@ import os
 import sys
 from typing import Any
 
+from agentassert_abc.exceptions import ContractLoadError
 from agentassert_abc.gateway.enforcer import SessionEnforcer
 from agentassert_abc.gateway.events import PostAction, PreAction, TypeCEvent
+from agentassert_abc.gateway.state import (
+    HOOK_PROVIDED_FIELDS,
+    assert_evaluable_on_response_surface,
+    flatten_output,
+)
 
 _enforcer_cache: dict[str, SessionEnforcer] = {}
 
@@ -32,8 +38,19 @@ def _get_enforcer(contract_path: str) -> SessionEnforcer | None:
         return _enforcer_cache[contract_path]
     try:
         enforcer = SessionEnforcer.from_yaml(contract_path)
+        # Refuse a contract this surface can never evaluate. The hook only sees
+        # the tool call and its output, so an invariant over anything else would
+        # score as a violation on every turn no matter how the agent behaved.
+        assert_evaluable_on_response_surface(
+            enforcer._contract, "Claude Code hook", HOOK_PROVIDED_FIELDS
+        )
         _enforcer_cache[contract_path] = enforcer
         return enforcer
+    except ContractLoadError as exc:
+        # Still fail-open (the hook must never block the user's session), but say
+        # why on stderr rather than silently enforcing nothing.
+        print(f"[agentassert] contract not loaded: {exc}", file=sys.stderr)
+        return None
     except Exception:  # noqa: BLE001 — fail-open, hook must never block on a bad contract.
         return None
 
@@ -53,11 +70,17 @@ def _event_from_hook(
             args=data.get("tool_input", {}),
         )
     if hook_type == "PostToolUse":
+        tool_output = data.get("tool_output", data.get("tool_response"))
+        # Flatten the tool output into `output.*`. Passing no state at all scored
+        # every semantic invariant as a violation regardless of agent behaviour.
+        state = {"tool.name": tool_name}
+        state.update(flatten_output(tool_output))
         return PostAction(
             session_id=session_id,
             contract_id=contract_id,
             tool=tool_name,
-            result=data.get("tool_output", data.get("tool_response")),
+            state=state,
+            result=tool_output,
         )
     return None
 

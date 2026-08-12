@@ -5,9 +5,10 @@
 
 """JudgeDispatcher — sampled, cost-capped, fail-open LLM-as-judge.
 
-Ported from agentassert-typec's `judge/dispatcher.py` (port-delta §A.2,
-item #22). IP note: the internal free-tier model alias has been genericized
-per Varun's public-release policy — "ds-flash-free" -> "free-tier-model".
+Evaluates a natural-language predicate over agent output on a sampled subset of
+turns, under a hard spend ceiling, and fails open: a judge error or an exhausted
+budget never blocks the agent. The default model is a generic free-tier alias —
+configure the model you actually want.
 """
 
 from __future__ import annotations
