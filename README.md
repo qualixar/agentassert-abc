@@ -249,7 +249,7 @@ python benchmarks/runner.py --verbose           # Show details
 
 ### Live LLM Benchmark -- Real Models, Real Contracts
 
-We tested AgentAssert against **3 production LLMs** on a 10-16 turn e-commerce session using the `retail-shopping-assistant` contract with real Azure AI Foundry endpoints:
+We tested AgentAssert against **3 production LLMs** on a 10-16 turn e-commerce session using the `retail-shopping-assistant` contract against live hosted model endpoints -- real API calls, not mocks or replayed transcripts:
 
 | Model | Turns | Hard Violations | Soft Violations | Theta | Mean Drift |
 |-------|-------|----------------|-----------------|-------|------------|

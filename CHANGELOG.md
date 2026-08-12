@@ -4,7 +4,16 @@ All notable changes to `agentassert-abc` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning 2.0](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] — unreleased
+## [0.7.1] — 2026-08-12
+
+### Fixed
+
+- Benchmark methodology in the README named the hosting platform used for the
+  live-model runs. The claim it supports — three production LLMs, real API
+  calls rather than mocks or replayed transcripts — is unchanged and now stated
+  directly.
+
+## [0.7.0] — 2026-08-12
 
 Enforcement stops being tied to a vendor. Until now a contract could only be
 enforced through one of three specific surfaces — an LLM wire format, a vendor

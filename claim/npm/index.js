@@ -1,4 +1,4 @@
 // AgentAssert: Formal behavioral specification for AI agents
 // Full TypeScript SDK coming soon. See https://agentassert.com
 // Python package: pip install agentassert-abc
-module.exports = { version: "0.7.0", status: "typescript-sdk-coming-q3-2026" };
+module.exports = { version: "0.7.1", status: "typescript-sdk-coming-q3-2026" };

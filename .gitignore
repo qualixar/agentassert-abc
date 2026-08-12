@@ -23,7 +23,7 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 
-# Benchmark outputs (regenerated per run; live_benchmark.py has Azure endpoints)
+# Benchmark outputs (regenerated per run; live_benchmark.py holds endpoint config)
 benchmarks/live_results.json
 benchmarks/live_benchmark.py
 

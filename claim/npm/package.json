@@ -1,6 +1,6 @@
 {
   "name": "agentassert-abc",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Formal behavioral specification and runtime enforcement for AI agents. Agent Behavioral Contracts (ABC).",
   "main": "index.js",
   "files": [
