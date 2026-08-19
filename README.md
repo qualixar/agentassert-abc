@@ -7,9 +7,18 @@
   <a href="https://pypi.org/project/agentassert-abc/"><img src="https://img.shields.io/pypi/v/agentassert-abc?style=flat-square&color=blue" alt="PyPI"></a>
   <a href="https://pypi.org/project/agentassert-abc/"><img src="https://img.shields.io/pypi/pyversions/agentassert-abc?style=flat-square" alt="Python"></a>
   <a href="https://arxiv.org/abs/2602.22302"><img src="https://img.shields.io/badge/arXiv-2602.22302-b31b1b?style=flat-square" alt="arXiv"></a>
+  <a href="https://youtube.com/watch?v=aGGA_sGnoIs"><img src="https://img.shields.io/badge/YouTube-Video%20Masterclass-FF0000.svg?style=flat-square&logo=youtube&logoColor=white" alt="YouTube"></a>
   <a href="https://github.com/qualixar/agentassert-abc/actions"><img src="https://img.shields.io/github/actions/workflow/status/qualixar/agentassert-abc/ci.yml?style=flat-square&label=tests" alt="CI"></a>
   <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=flat-square" alt="AGPL v3"></a>
 </p>
+
+---
+
+## 📺 5-Minute Technical Masterclass
+
+[![Why 90% of Multi-Agent Systems Fail](https://img.youtube.com/vi/aGGA_sGnoIs/maxresdefault.jpg)](https://youtube.com/watch?v=aGGA_sGnoIs)
+
+> **[Watch on YouTube (5m 20s) ↗](https://youtube.com/watch?v=aGGA_sGnoIs)**: *Author Varun Pratap Bhardwaj breaks down the 18,000-mission empirical study exposing why multi-agent systems suffer a 90% shared co-failure rate and how formal contracts provide provable reliability bounds.*
 
 ---
 
