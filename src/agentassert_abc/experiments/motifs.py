@@ -70,7 +70,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
-from typing import TYPE_CHECKING, Final, Protocol
+from typing import TYPE_CHECKING, Final, Literal, Protocol, cast
 
 from agentassert_abc.exceptions import AgentAssertError
 from agentassert_abc.experiments.logging_schema import (
@@ -108,8 +108,7 @@ class ModelClient(Protocol):
     satisfies this protocol.  No inheritance required.
     """
 
-    def generate(self, model: str, prompt: str) -> ModelResponse:
-        ...  # pragma: no cover
+    def generate(self, model: str, prompt: str) -> ModelResponse: ...  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------
@@ -335,9 +334,7 @@ def _run_series(
         resp = client.generate(model, prompt)
         hard_ok = score(task, resp.text)
         soft_ok = score_soft(task, resp.text)
-        comps[node_id] = _make_comp(
-            node_id, resp, hard_ok=hard_ok, soft_ok=soft_ok, scored=True
-        )
+        comps[node_id] = _make_comp(node_id, resp, hard_ok=hard_ok, soft_ok=soft_ok, scored=True)
         prev_output = resp.text
         total_tokens += resp.input_tokens + resp.output_tokens
         total_cost += resp.cost_usd
@@ -415,9 +412,7 @@ def _run_parallel_quorum(
         total_cost += resp.cost_usd
 
     passing_ids: list[str] = [
-        bid
-        for bid in branch_ids
-        if branch_comps[bid].hard_ok and branch_comps[bid].soft_ok
+        bid for bid in branch_ids if branch_comps[bid].hard_ok and branch_comps[bid].soft_ok
     ]
     quorum_met: bool = len(passing_ids) >= quorum_threshold
 
@@ -439,14 +434,13 @@ def _run_parallel_quorum(
 
     # Handoffs: only passing branches emit handoffs to aggregator
     handoffs: tuple[HandoffRecord, ...] = tuple(
-        HandoffRecord(from_id=pid, to_id=agg_id, handoff_ok=True)
-        for pid in passing_ids
+        HandoffRecord(from_id=pid, to_id=agg_id, handoff_ok=True) for pid in passing_ids
     )
 
     # Full component vector: all branches (in motif order) + aggregator
-    all_comps: tuple[ComponentRecord, ...] = tuple(
-        branch_comps[bid] for bid in branch_ids
-    ) + (agg_comp,)
+    all_comps: tuple[ComponentRecord, ...] = tuple(branch_comps[bid] for bid in branch_ids) + (
+        agg_comp,
+    )
 
     return realized_route, all_comps, handoffs, total_tokens, total_cost
 
@@ -505,7 +499,8 @@ def _run_hierarchy(
     )
     hard_ok_s = score(task, resp_s.text)
     comps[sup_id] = _make_comp(
-        sup_id, resp_s,
+        sup_id,
+        resp_s,
         hard_ok=hard_ok_s,
         soft_ok=score_soft(task, resp_s.text),
         scored=True,
@@ -520,7 +515,8 @@ def _run_hierarchy(
     )
     hard_ok_w = score(task, resp_w.text)
     comps[worker_id] = _make_comp(
-        worker_id, resp_w,
+        worker_id,
+        resp_w,
         hard_ok=hard_ok_w,
         soft_ok=score_soft(task, resp_w.text),
         scored=True,
@@ -535,7 +531,8 @@ def _run_hierarchy(
     )
     hard_ok_v = score(task, resp_v.text)
     comps[verifier_id] = _make_comp(
-        verifier_id, resp_v,
+        verifier_id,
+        resp_v,
         hard_ok=hard_ok_v,
         soft_ok=score_soft(task, resp_v.text),
         scored=True,
@@ -558,9 +555,7 @@ def _run_hierarchy(
     )
 
     # Full component vector in motif.nodes order (deterministic)
-    all_comps: tuple[ComponentRecord, ...] = tuple(
-        comps[nid] for nid in motif.nodes
-    )
+    all_comps: tuple[ComponentRecord, ...] = tuple(comps[nid] for nid in motif.nodes)
 
     return motif.route, all_comps, handoffs, total_tokens, total_cost
 
@@ -627,9 +622,7 @@ def run_mission(
         If *model_assignment* is missing a required generative node ID.
     """
     if motif.name in ("series2", "series3"):
-        route, comps, handoffs, tokens, cost = _run_series(
-            motif, task, model_assignment, client
-        )
+        route, comps, handoffs, tokens, cost = _run_series(motif, task, model_assignment, client)
     elif motif.name in ("parallel2", "quorum2of3", "quorum3of4"):
         route, comps, handoffs, tokens, cost = _run_parallel_quorum(
             motif, task, model_assignment, client
@@ -640,19 +633,18 @@ def run_mission(
         )
     else:
         raise MotifError(
-            f"Unknown motif name {motif.name!r}. "
-            f"Registered names: {sorted(MOTIF_LIBRARY)}"
+            f"Unknown motif name {motif.name!r}. Registered names: {sorted(MOTIF_LIBRARY)}"
         )
 
-    timestamp = (
-        datetime.datetime.now(_UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    )
+    timestamp = datetime.datetime.now(_UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     return MissionRecord.make(
         mission_id=mission_id,
         cluster_id=cluster_id,
         motif=motif.name,
-        sharing_condition=sharing_condition,
+        sharing_condition=cast(
+            "Literal['same_model', 'same_vendor', 'different_vendor']", sharing_condition
+        ),
         route=route,
         components=comps,
         handoffs=handoffs,

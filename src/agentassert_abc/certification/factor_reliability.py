@@ -54,6 +54,7 @@ conventions for one model, not a contradiction). Positive latent correlation
 from __future__ import annotations
 
 import dataclasses
+from typing import Any, cast
 
 import numpy as np
 from scipy.integrate import quad
@@ -185,10 +186,12 @@ def gaussian_copula_all_success(
     if m == 2:
         rho = float(np.clip(R[0, 1], -_RCLIP, _RCLIP))
         cov = [[1.0, rho], [rho, 1.0]]
-        return float(multivariate_normal.cdf(a, mean=[0.0, 0.0], cov=cov))
+        return float(multivariate_normal.cdf(a, mean=[0.0, 0.0], cov=cast("Any", cov)))
     if not _assume_psd:
         R = _psd_retract_corr(R)  # noqa: N806
-    return float(multivariate_normal.cdf(a, mean=np.zeros(m), cov=R, allow_singular=True))
+    return float(
+        multivariate_normal.cdf(a, mean=np.zeros(m), cov=cast("Any", R), allow_singular=True)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -196,9 +199,7 @@ def gaussian_copula_all_success(
 # ---------------------------------------------------------------------------
 
 
-def shared_factor_all_success(
-    marginals: object, loadings: object, q: int = 64
-) -> float:
+def shared_factor_all_success(marginals: object, loadings: object, q: int = 64) -> float:
     """One-factor all-success reliability via Gauss–Hermite (LLD-B Thm B.6).
 
     Under the shared-factor model :math:`U_j = λ_j Ξ + \\sqrt{1 − λ_j^2}\\,ε_j`
@@ -284,8 +285,11 @@ def factor_all_success(marginals: object, loadings: object) -> tuple[float, floa
         if abs(lam[j]) > 1e-9 and abs(a[j] / lam[j]) < _QUAD_HALFWIDTH
     )
     value, abserr = quad(
-        _integrand, -_QUAD_HALFWIDTH, _QUAD_HALFWIDTH,
-        points=kinks or None, limit=200,
+        _integrand,
+        -_QUAD_HALFWIDTH,
+        _QUAD_HALFWIDTH,
+        points=kinks or None,
+        limit=200,
     )
     lo, hi = frechet_all_success_bounds(p)
     if value < lo - _FR_TOL or value > hi + _FR_TOL:

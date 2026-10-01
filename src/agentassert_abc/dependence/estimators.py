@@ -21,11 +21,12 @@ Design notes:
   therefore means "fail together".
 * All estimators are immutable and side-effect free; inputs are never mutated.
 """
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from scipy.optimize import brentq
@@ -51,14 +52,15 @@ __all__ = [
 class CoFailureTable:
     """Immutable 2x2 contingency of two agents' failure indicators.
 
+    Fractional continuity-corrected cells are supported by tetrachoric fitting.
     Cells count missions by ``(a_failed, b_failed)``:
     ``n11`` both failed, ``n10`` only a, ``n01`` only b, ``n00`` neither.
     """
 
-    n11: int
-    n10: int
-    n01: int
-    n00: int
+    n11: float
+    n10: float
+    n01: float
+    n00: float
 
     def __post_init__(self) -> None:
         for name in ("n11", "n10", "n01", "n00"):
@@ -90,7 +92,7 @@ class CoFailureTable:
         return cls(n11=n11, n10=n10, n01=n01, n00=n00)
 
     @property
-    def n(self) -> int:
+    def n(self) -> float:
         """Total mission count."""
         return self.n11 + self.n10 + self.n01 + self.n00
 
@@ -181,15 +183,15 @@ def tetrachoric(table: CoFailureTable) -> float:
     """
     pa, pb, p11 = table.p_a, table.p_b, table.p11
     if not (0.0 < pa < 1.0) or not (0.0 < pb < 1.0):
-        raise DependenceError(
-            "tetrachoric undefined for a degenerate marginal (0 or 1)"
-        )
+        raise DependenceError("tetrachoric undefined for a degenerate marginal (0 or 1)")
     tau_a = float(norm.ppf(pa))
     tau_b = float(norm.ppf(pb))
 
     def joint(rho: float) -> float:
         cov = [[1.0, rho], [rho, 1.0]]
-        return float(multivariate_normal.cdf([tau_a, tau_b], mean=[0.0, 0.0], cov=cov))
+        return float(
+            multivariate_normal.cdf([tau_a, tau_b], mean=[0.0, 0.0], cov=cast("Any", cov))
+        )
 
     # Frechet feasibility: p11 must lie within the joint's attainable range.
     lo, hi = -0.999999, 0.999999
@@ -198,7 +200,7 @@ def tetrachoric(table: CoFailureTable) -> float:
         return -1.0
     if f_hi < 0:  # even at rho=+1 the joint is below p11 -> clamp
         return 1.0
-    return float(brentq(lambda r: joint(r) - p11, lo, hi, xtol=1e-10))
+    return float(cast("float", brentq(lambda r: joint(r) - p11, lo, hi, xtol=1e-10)))
 
 
 def tau_a_min_samples(eps: float, alpha: float) -> int:

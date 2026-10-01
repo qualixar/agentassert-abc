@@ -1,7 +1,30 @@
-<p align="center">
-  <strong>AgentAssert</strong><br>
-  <em>Formal Behavioral Contracts for AI Agents</em>
-</p>
+# AgentAssert — runtime behavioral contracts for AI agents
+
+Define rules in YAML and check structured agent state in Python. A hard
+violation can raise `ContractBreachError` before your application continues.
+Your application supplies the signals and places the check at the action boundary.
+
+**[Install and docs](https://agentassert.com/getting-started)** · **[Working proof](docs/QUICK_PROOF.md)** · **[Research](https://agentassert.com/research)**
+
+```bash
+python -m pip install "agentassert-abc[yaml,math]"
+```
+
+Requires Python 3.12+. Clone this repository to run the self-contained example:
+
+```bash
+python examples/00_quick_proof.py
+# Allowed state: 0 hard violations
+# Unapproved state: ContractBreachError
+```
+
+This synthetic example checks a supplied `release.approved` boolean. It does
+not detect PII, assess security, or certify arbitrary agent behavior. AgentAssert
+supports AI Reliability Engineering through explicit contracts and observable checks.
+
+[Research on the dedicated site](https://agentassert.com/research) · [Qualixar overview](https://qualixar.com/products/agentassert) · [Author and research context](https://varunpratap.com/products/agentassert). If this check helps your workflow, [star the repository](https://github.com/qualixar/agentassert-abc); using the package does not require a star.
+
+
 
 <p align="center">
   <a href="https://pypi.org/project/agentassert-abc/"><img src="https://img.shields.io/pypi/v/agentassert-abc?style=flat-square&color=blue" alt="PyPI"></a>
@@ -22,9 +45,9 @@
 
 ---
 
-AgentAssert is the **formal behavioral specification and runtime enforcement engine** for autonomous AI agents. Define what your agent must and must not do in a YAML contract, then enforce those rules at runtime with mathematical guarantees.
+AgentAssert is the **formal behavioral specification and runtime enforcement engine** for autonomous AI agents. Define what your agent must and must not do in a YAML contract, then check supplied signals at runtime. The papers below state the assumptions and scope of the mathematical results.
 
-It is the only framework combining all **6 pillars** of rigorous agent governance:
+The framework combines **6 components** of agent governance:
 
 1. **ContractSpec DSL** -- YAML-based behavioral specification with 14 operators
 2. **Hard/Soft Constraints** -- Formal separation with graduated enforcement and recovery

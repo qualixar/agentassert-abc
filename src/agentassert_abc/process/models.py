@@ -260,8 +260,9 @@ class ContractSpecExtended(ContractSpec):
     """
 
     dsl_version: str = "0.3"
-    invariants: InvariantsExtended | None = None
-    recovery: RecoveryConfigExtended | None = None
+    # Frozen Pydantic fields validate this narrowing; pyright treats them as mutable.
+    invariants: InvariantsExtended | None = None  # pyright: ignore[reportIncompatibleVariableOverride]
+    recovery: RecoveryConfigExtended | None = None  # pyright: ignore[reportIncompatibleVariableOverride]
     upstream: UpstreamConfig | None = None
 
 

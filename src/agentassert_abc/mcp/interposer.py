@@ -28,7 +28,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, TextIO, cast
 
 from agentassert_abc.mcp import jsonrpc
 
@@ -185,8 +185,8 @@ def run_guard(
         guard,
         client_in=client_in if client_in is not None else sys.stdin,
         client_out=client_out if client_out is not None else sys.stdout,
-        server_in=proc.stdin,
-        server_out=proc.stdout,
+        server_in=cast("TextIO", proc.stdin),
+        server_out=cast("TextIO", proc.stdout),
     )
     try:
         pump.run()

@@ -27,7 +27,7 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from agentassert_abc.exceptions import ContractBreachError
 from agentassert_abc.gateway.content.pii import apply_pii_redaction, evaluate_pii_filter
@@ -38,6 +38,12 @@ if TYPE_CHECKING:
     from agentassert_abc.gateway.enforcer import SessionEnforcer
 
 __all__ = ["EnforcementBridge", "ToolDecision", "ToolOutcome"]
+
+
+class _DecisionIds(TypedDict):
+    tool: str
+    session_id: str
+    contract_id: str
 
 
 @dataclass(frozen=True)
@@ -396,7 +402,7 @@ class EnforcementBridge:
         with self._lock:
             self._denied += 1
 
-    def _ids(self, tool: str) -> dict[str, str]:
+    def _ids(self, tool: str) -> _DecisionIds:
         return {
             "tool": tool,
             "session_id": self._session_id,

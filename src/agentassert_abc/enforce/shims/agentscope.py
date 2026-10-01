@@ -155,6 +155,8 @@ def _rewrite(kwargs: dict[str, Any], holder: str | None, args: dict[str, Any]) -
     if holder is None:
         return {**kwargs, "input": args}
     candidate = kwargs.get(holder)
+    if candidate is None:
+        return kwargs
     if isinstance(candidate, dict):
         return {**kwargs, holder: {**candidate, "input": args}}
     # A structured block: mutate the copy's field, since we cannot rebuild an
