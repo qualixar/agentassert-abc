@@ -37,6 +37,7 @@ or the copula-agnostic Tier 1 (:mod:`~agentassert_abc.certification.lp_bound`).
 from __future__ import annotations
 
 import dataclasses
+from typing import Any, cast
 
 import numpy as np
 from scipy.stats import multivariate_normal, norm
@@ -103,7 +104,9 @@ def _rho_from_failure_cells(qa: float, qb: float, f11: float) -> float:
     for _ in range(60):
         mid = 0.5 * (lo + hi)
         cov = [[1.0, mid], [mid, 1.0]]
-        val = multivariate_normal.cdf([za, zb], mean=[0.0, 0.0], cov=cov, allow_singular=True)
+        val = multivariate_normal.cdf(
+            [za, zb], mean=[0.0, 0.0], cov=cast("Any", cov), allow_singular=True
+        )
         if float(val) < f11:
             lo = mid
         else:
@@ -198,9 +201,16 @@ def slepian_model_floor(passes: object, eta_conf: float = 0.05) -> SlepianModelF
     )
     if m == 1:
         return SlepianModelFloor(
-            floor=float(p_lo[0]), observed=observed, eta_conf=eta_conf, m=m, n=n,
-            rho_lower=((1.0,),), p_lo=(float(p_lo[0]),), is_model_bound=True,
-            basis="single stage (Slepian floor vacuous at m=1)", assumptions=assumptions,
+            floor=float(p_lo[0]),
+            observed=observed,
+            eta_conf=eta_conf,
+            m=m,
+            n=n,
+            rho_lower=((1.0,),),
+            p_lo=(float(p_lo[0]),),
+            is_model_bound=True,
+            basis="single stage (Slepian floor vacuous at m=1)",
+            assumptions=assumptions,
         )
     # Failure-marginal boxes: q = 1 − p, so q_lo = 1 − p_hi and q_hi = 1 − p_lo.
     q_lo = 1.0 - p_hi
@@ -217,9 +227,9 @@ def slepian_model_floor(passes: object, eta_conf: float = 0.05) -> SlepianModelF
         # _assume_psd=True: corr_used is already PD and monotone-safe; do NOT let
         # gaussian_copula_all_success re-apply the unsafe scale-toward-0 retraction
         # (double-projection hazard, Opus 5 audit 2026-08-11).
-        floor = float(np.clip(
-            gaussian_copula_all_success(p_lo, corr_used, _assume_psd=True), 0.0, 1.0
-        ))
+        floor = float(
+            np.clip(gaussian_copula_all_success(p_lo, corr_used, _assume_psd=True), 0.0, 1.0)
+        )
         basis = "Thm B.7 exact: Gaussian orthant at the monotone (p_lo, ρ_lo) corner (Slepian)"
     except DependenceError:
         # Grok CRIT#1: an indefinite lower corner admits no elementwise-dominated

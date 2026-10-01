@@ -167,7 +167,7 @@ class MissionRecord:
     mission_id: str
     cluster_id: str
     # Ledger 3f: narrow from str to Literal so static analysis catches invalid values.
-    motif: Literal["series2", "series3", "parallel2", "quorum2of3", "hierarchy"]
+    motif: Literal["series2", "series3", "parallel2", "quorum2of3", "quorum3of4", "hierarchy"]
     sharing_condition: Literal["same_model", "same_vendor", "different_vendor"]
     route: tuple[str, ...]
     components: tuple[ComponentRecord, ...]
@@ -184,7 +184,7 @@ class MissionRecord:
         mission_id: str,
         cluster_id: str,
         # Ledger 3f: Literal types narrow the parameter to valid values only.
-        motif: Literal["series2", "series3", "parallel2", "quorum2of3", "hierarchy"],
+        motif: Literal["series2", "series3", "parallel2", "quorum2of3", "quorum3of4", "hierarchy"],
         sharing_condition: Literal["same_model", "same_vendor", "different_vendor"],
         route: tuple[str, ...],
         components: tuple[ComponentRecord, ...],

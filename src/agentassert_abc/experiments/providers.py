@@ -500,12 +500,7 @@ class _OpenAICompatBase:
         # PROVIDER_PRICES table (Meta/Grok do not report a cost field).
         cost_usd: float
         reported = usage.get("cost")
-        reported_ok = (
-            isinstance(reported, (int, float))
-            and not isinstance(reported, bool)
-            and reported >= 0
-        )
-        if reported_ok:
+        if isinstance(reported, (int, float)) and not isinstance(reported, bool) and reported >= 0:
             cost_usd = float(reported)
         else:
             fallback_prices = (

@@ -22,6 +22,9 @@ This synthetic example checks a supplied `release.approved` boolean. It does
 not detect PII, assess security, or certify arbitrary agent behavior. AgentAssert
 supports AI Reliability Engineering through explicit contracts and observable checks.
 
+[Research on the dedicated site](https://agentassert.com/research) · [Qualixar overview](https://qualixar.com/products/agentassert) · [Author and research context](https://varunpratap.com/products/agentassert). If this check helps your workflow, [star the repository](https://github.com/qualixar/agentassert-abc); using the package does not require a star.
+
+
 
 <p align="center">
   <a href="https://pypi.org/project/agentassert-abc/"><img src="https://img.shields.io/pypi/v/agentassert-abc?style=flat-square&color=blue" alt="PyPI"></a>
